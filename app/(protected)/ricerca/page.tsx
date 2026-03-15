@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Topbar } from "../../../components/layout/topbar"
 import { QrZoneScanner } from "@/components/scanner/qr-zone-scanner"
 
@@ -65,6 +65,9 @@ export default function RicercaPage() {
 
   const [confermaModifica, setConfermaModifica] = useState(false)
   const [confermaConsegna, setConfermaConsegna] = useState(false)
+  const [showScrollTop, setShowScrollTop] = useState(false)
+
+  const actionSectionRef = useRef<HTMLDivElement | null>(null)
 
   async function cerca() {
     if (!query.trim()) return
@@ -93,10 +96,12 @@ export default function RicercaPage() {
 
       setVettura(json.veicolo)
       setStorico(json.storico || [])
-      setPermessi(json.permessi || {
-        can_consegna: false,
-        can_modifica_targa: false,
-      })
+      setPermessi(
+        json.permessi || {
+          can_consegna: false,
+          can_modifica_targa: false,
+        }
+      )
 
       setFormModifica({
         targa: json.veicolo.targa || "",
@@ -113,6 +118,32 @@ export default function RicercaPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300)
+    }
+
+    handleScroll()
+    window.addEventListener("scroll", handleScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!azioneAttiva) return
+
+    const t = window.setTimeout(() => {
+      actionSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    }, 120)
+
+    return () => window.clearTimeout(t)
+  }, [azioneAttiva])
 
   function resetMessaggi() {
     setError("")
@@ -269,6 +300,13 @@ export default function RicercaPage() {
     }
   }
 
+  function scrollTop() {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    })
+  }
+
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
       <Topbar />
@@ -418,6 +456,8 @@ export default function RicercaPage() {
             )}
           </div>
 
+          {azioneAttiva && <div ref={actionSectionRef} className="pt-2" />}
+
           {azioneAttiva === "sposta" && (
             <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="text-xl font-bold text-slate-900">Sposta vettura</h2>
@@ -435,8 +475,8 @@ export default function RicercaPage() {
               </div>
 
               {zonaScansionata && (
-                <div className="mt-4 rounded-2xl bg-amber-50 p-4">
-                  <div className="text-sm text-slate-500">Nuova zona rilevata</div>
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="text-sm text-emerald-700">Nuova zona rilevata</div>
                   <div className="mt-1 text-lg font-bold text-slate-900">
                     {zonaScansionata.zonaId} - {zonaScansionata.zonaNome}
                   </div>
@@ -675,6 +715,17 @@ export default function RicercaPage() {
             </div>
           )}
         </>
+      )}
+
+      {showScrollTop && (
+        <button
+          onClick={scrollTop}
+          aria-label="Torna su"
+          className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-violet-600 text-white shadow-xl transition-all duration-200 hover:bg-violet-700 active:scale-95 md:h-12 md:w-auto md:min-w-[124px] md:rounded-2xl md:px-4"
+        >
+          <span className="text-xl md:hidden">↑</span>
+          <span className="hidden text-sm font-semibold md:inline">Torna su</span>
+        </button>
       )}
     </div>
   )
