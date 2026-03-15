@@ -36,6 +36,7 @@ export default function VerificaZonePage() {
   const [records, setRecords] = useState<VeicoloZona[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [showScrollTop, setShowScrollTop] = useState(false)
 
   async function loadZona(selectedZonaId: string) {
     setLoading(true)
@@ -67,6 +68,26 @@ export default function VerificaZonePage() {
   useEffect(() => {
     loadZona(zonaId)
   }, [zonaId])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300)
+    }
+
+    handleScroll()
+    window.addEventListener("scroll", handleScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+    }
+  }, [])
+
+  function scrollTop() {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    })
+  }
 
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
@@ -237,6 +258,17 @@ export default function VerificaZonePage() {
           </div>
         ))}
       </div>
+
+      {showScrollTop && (
+        <button
+          onClick={scrollTop}
+          aria-label="Torna su"
+          className="fixed right-5 bottom-24 md:bottom-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-violet-600 text-white shadow-xl transition-all duration-200 hover:bg-violet-700 active:scale-95 md:h-12 md:w-auto md:min-w-[124px] md:rounded-2xl md:px-4"
+        >
+          <span className="text-xl md:hidden">↑</span>
+          <span className="hidden text-sm font-semibold md:inline">Torna su</span>
+        </button>
+      )}
     </div>
   )
 }
