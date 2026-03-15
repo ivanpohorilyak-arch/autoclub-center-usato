@@ -194,6 +194,39 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const modifiche: string[] = []
+
+    if ((veicoloAttuale.targa || "") !== nuovaTarga) {
+      modifiche.push(`Targa: ${veicoloAttuale.targa || "-"} → ${nuovaTarga}`)
+    }
+
+    if ((veicoloAttuale.marca_modello || "") !== marca_modello) {
+      modifiche.push(
+        `Marca/Modello: ${veicoloAttuale.marca_modello || "-"} → ${marca_modello}`
+      )
+    }
+
+    if ((veicoloAttuale.colore || "") !== colore) {
+      modifiche.push(`Colore: ${veicoloAttuale.colore || "-"} → ${colore}`)
+    }
+
+    if ((veicoloAttuale.km ?? null) !== (km ?? null)) {
+      modifiche.push(`KM: ${veicoloAttuale.km ?? "-"} → ${km ?? "-"}`)
+    }
+
+    if ((veicoloAttuale.numero_chiave ?? null) !== (numero_chiave ?? null)) {
+      modifiche.push(
+        `Chiave: ${veicoloAttuale.numero_chiave ?? "-"} → ${numero_chiave ?? "-"}`
+      )
+    }
+
+    if ((veicoloAttuale.note || "") !== note) {
+      modifiche.push("Note aggiornate")
+    }
+
+    const dettaglio =
+      modifiche.length > 0 ? modifiche.join(" | ") : "Nessuna modifica rilevata"
+
     const updatePayload = {
       targa: nuovaTarga,
       marca_modello,
@@ -218,7 +251,6 @@ export async function POST(req: NextRequest) {
     }
 
     const now = new Date().toISOString()
-    const dettaglio = `Aggiornamento dati vettura`
 
     await supabase.from("log_movimenti").insert({
       targa: nuovaTarga,
