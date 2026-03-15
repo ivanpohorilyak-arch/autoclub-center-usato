@@ -3,6 +3,20 @@
 import { useEffect, useMemo, useState } from "react"
 import { Topbar } from "../../../components/layout/topbar"
 
+type AuditRecordRaw = {
+  id?: number
+  created_at?: string
+  operatore?: string | null
+  utente?: string | null
+  azione?: string | null
+  targa?: string | null
+  numero_chiave?: number | null
+  zona_id?: string | null
+  zona_attuale?: string | null
+  dettaglio?: string | null
+  esito?: string | null
+}
+
 type AuditRecord = {
   id: number
   created_at: string
@@ -16,8 +30,23 @@ type AuditRecord = {
   esito: string
 }
 
+function normalizeRecord(r: AuditRecordRaw, index: number): AuditRecord {
+  return {
+    id: r.id ?? index + 1,
+    created_at: r.created_at || new Date().toISOString(),
+    operatore: r.operatore ?? r.utente ?? null,
+    azione: (r.azione || "NON RILEVATA").toString(),
+    targa: r.targa ?? null,
+    numero_chiave: r.numero_chiave ?? null,
+    zona_id: r.zona_id ?? null,
+    zona_attuale: r.zona_attuale ?? null,
+    dettaglio: r.dettaglio ?? null,
+    esito: (r.esito || "OK").toString(),
+  }
+}
+
 function getAzioneBadgeClass(azione: string) {
-  const key = azione.toUpperCase()
+  const key = (azione || "").toUpperCase()
 
   if (key.includes("INGRESSO")) {
     return "bg-blue-100 text-blue-700"
@@ -43,7 +72,11 @@ function getAzioneBadgeClass(azione: string) {
     return "bg-orange-100 text-orange-700"
   }
 
-  if (key.includes("NEGATA") || key.includes("KO")) {
+  if (key.includes("RIPRISTINO")) {
+    return "bg-rose-100 text-rose-700"
+  }
+
+  if (key.includes("NEGATA") || key.includes("KO") || key.includes("ERRORE")) {
     return "bg-red-100 text-red-700"
   }
 
@@ -51,7 +84,8 @@ function getAzioneBadgeClass(azione: string) {
 }
 
 function getEsitoBadgeClass(esito: string) {
-  return esito === "OK"
+  const value = (esito || "").toUpperCase()
+  return value === "OK"
     ? "bg-emerald-100 text-emerald-700"
     : "bg-red-100 text-red-700"
 }
@@ -72,16 +106,20 @@ export default function AuditPage() {
 
       const data = await res.json()
 
-      if (data.ok) {
-        setRecords(data.records || [])
+      if (data?.ok) {
+        const rawRecords: AuditRecordRaw[] = Array.isArray(data.records)
+          ? data.records
+          : []
+
+        setRecords(rawRecords.map((r, index) => normalizeRecord(r, index)))
       } else {
         setRecords([])
       }
     } catch {
       setRecords([])
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   useEffect(() => {
@@ -233,7 +271,7 @@ export default function AuditPage() {
             )}
 
             {records.map((r) => (
-              <tr key={r.id} className="border-t border-slate-100 align-top">
+              <tr key={`${r.id}-${r.created_at}`} className="border-t border-slate-100 align-top">
                 <td className="px-3 py-3 whitespace-nowrap">
                   {new Date(r.created_at).toLocaleString()}
                 </td>
@@ -246,7 +284,7 @@ export default function AuditPage() {
                       r.azione
                     )}`}
                   >
-                    {r.azione}
+                    {r.azione || "NON RILEVATA"}
                   </span>
                 </td>
 
@@ -268,7 +306,7 @@ export default function AuditPage() {
                       r.esito
                     )}`}
                   >
-                    {r.esito}
+                    {r.esito || "OK"}
                   </span>
                 </td>
               </tr>
@@ -292,7 +330,7 @@ export default function AuditPage() {
 
         {records.map((r) => (
           <div
-            key={r.id}
+            key={`${r.id}-${r.created_at}`}
             className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"
           >
             <div className="mb-3 flex items-start justify-between gap-3">
@@ -305,7 +343,7 @@ export default function AuditPage() {
                   r.esito
                 )}`}
               >
-                {r.esito}
+                {r.esito || "OK"}
               </span>
             </div>
 
@@ -315,7 +353,7 @@ export default function AuditPage() {
                   r.azione
                 )}`}
               >
-                {r.azione}
+                {r.azione || "NON RILEVATA"}
               </span>
             </div>
 
