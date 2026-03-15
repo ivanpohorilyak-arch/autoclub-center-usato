@@ -19,15 +19,23 @@ const ZONE_INFO: Record<string, string> = {
   Z14: "Esterno (Con o Senza telo Motorsclub)",
 }
 
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
+
 export async function POST(req: NextRequest) {
   const auth = requireServerAuth()
   if (!auth.ok) return auth.response
+
   try {
     const body = await req.json()
     const targa = String(body.targa || "").trim().toUpperCase()
     const zonaId = String(body.zonaId || "").trim().toUpperCase()
 
-    const operatore = req.cookies.get("autoclub_user")?.value || "Operatore"
+    const operatore = req.cookies.get("autoclub_user")?.value || auth.user || "Operatore"
 
     if (!targa) {
       return NextResponse.json({ ok: false, error: "Targa mancante" }, { status: 400 })
@@ -40,14 +48,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = getSupabase()
 
     const { data: veicolo, error: findError } = await supabase
       .from("parco_usato")
-      .select("targa, zona_attuale")
+      .select("targa, zona_id, zona_attuale, numero_chiave")
       .eq("targa", targa)
       .eq("stato", "PRESENTE")
       .maybeSingle()
@@ -64,6 +69,7 @@ export async function POST(req: NextRequest) {
     }
 
     const nuovaZona = ZONE_INFO[zonaId]
+    const dettaglio = `Da ${veicolo.zona_attuale || "-"} a ${nuovaZona}`
 
     const { error: updateError } = await supabase
       .from("parco_usato")
@@ -79,12 +85,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: updateError.message }, { status: 500 })
     }
 
+    const now = new Date().toISOString()
+
     await supabase.from("log_movimenti").insert({
       targa,
       azione: "Spostamento",
-      dettaglio: `Da ${veicolo.zona_attuale} a ${nuovaZona}`,
+      dettaglio,
       utente: operatore,
-      created_at: new Date().toISOString(),
+      numero_chiave: veicolo.numero_chiave ?? 0,
+      created_at: now,
+    })
+
+    await supabase.from("audit_log_sistema").insert({
+      operatore,
+      azione: "SPOSTAMENTO",
+      targa,
+      numero_chiave: veicolo.numero_chiave ?? 0,
+      zona_id: zonaId,
+      zona_attuale: nuovaZona,
+      dettaglio,
+      esito: "OK",
+      created_at: now,
     })
 
     return NextResponse.json({
