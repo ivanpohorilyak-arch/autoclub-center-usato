@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Topbar } from "../../../components/layout/topbar"
 
 type RipristinoRecord = {
@@ -24,6 +24,20 @@ export default function RipristinaPage() {
   const [selected, setSelected] = useState<RipristinoRecord | null>(null)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [showScrollTop, setShowScrollTop] = useState(false)
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300)
+    }
+
+    handleScroll()
+    window.addEventListener("scroll", handleScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+    }
+  }, [])
 
   async function cerca() {
     const q = query.trim()
@@ -104,6 +118,13 @@ export default function RipristinaPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  function scrollTop() {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    })
   }
 
   return (
@@ -257,6 +278,18 @@ export default function RipristinaPage() {
           </div>
         )}
       </div>
+
+      {showScrollTop && (
+        <button
+          type="button"
+          onClick={scrollTop}
+          aria-label="Torna su"
+          className="fixed right-5 bottom-24 md:bottom-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-violet-600 text-white shadow-xl transition-all duration-200 hover:bg-violet-700 active:scale-95 md:h-12 md:w-auto md:min-w-[124px] md:rounded-2xl md:px-4"
+        >
+          <span className="text-xl md:hidden">↑</span>
+          <span className="hidden text-sm font-semibold md:inline">Torna su</span>
+        </button>
+      )}
     </div>
   )
 }
