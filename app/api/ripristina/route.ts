@@ -61,9 +61,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const targa = String(body?.targa || "")
-      .trim()
-      .toUpperCase()
+    const targa = String(body?.targa || "").trim().toUpperCase()
 
     if (!targa) {
       return NextResponse.json(
@@ -95,7 +93,7 @@ export async function POST(req: NextRequest) {
         operatore: auth.user,
         azione: "RIPRISTINO_VEICOLO",
         targa,
-        dettaglio: "Tentativo ripristino su vettura non trovata o non consegnata",
+        dettaglio: "Tentativo ripristino su vettura non trovata o non in stato CONSEGNATO",
         esito: "KO",
       })
 
@@ -119,9 +117,10 @@ export async function POST(req: NextRequest) {
         operatore: auth.user,
         azione: "RIPRISTINO_VEICOLO",
         targa,
+        numero_chiave: veicolo.numero_chiave ?? 0,
         zona_id: veicolo.zona_id,
         zona_attuale: veicolo.zona_attuale,
-        dettaglio: "Errore durante ripristino vettura",
+        dettaglio: "Errore durante aggiornamento stato da CONSEGNATO a PRESENTE",
         esito: "KO",
       })
 
@@ -131,14 +130,25 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const dettaglioMovimento =
+      `Ripristino da CONSEGNATO a PRESENTE | ` +
+      `Zona mantenuta: ${veicolo.zona_attuale || veicolo.zona_id || "-"} | ` +
+      `Chiave attuale: ${veicolo.numero_chiave === 0 ? "0 - Commerciante" : veicolo.numero_chiave ?? "-"}`
+
     await supabase.from("log_movimenti").insert({
       targa,
       azione: "Ripristino",
-      dettaglio: `Riportata in stock da CONSEGNATO a PRESENTE`,
+      dettaglio: dettaglioMovimento,
       utente: auth.user,
       numero_chiave: veicolo.numero_chiave ?? 0,
       created_at: new Date().toISOString(),
     })
+
+    const dettaglioAudit =
+      `Ripristino veicolo ${veicolo.marca_modello || ""}`.trim() +
+      ` | Stato: CONSEGNATO → PRESENTE` +
+      ` | Zona: ${veicolo.zona_attuale || veicolo.zona_id || "-"}` +
+      ` | Chiave: ${veicolo.numero_chiave === 0 ? "0 - Commerciante" : veicolo.numero_chiave ?? "-"}`
 
     await writeAuditLog({
       operatore: auth.user,
@@ -147,7 +157,7 @@ export async function POST(req: NextRequest) {
       numero_chiave: veicolo.numero_chiave ?? 0,
       zona_id: veicolo.zona_id,
       zona_attuale: veicolo.zona_attuale,
-      dettaglio: `Ripristinata vettura ${veicolo.marca_modello || ""}`.trim(),
+      dettaglio: dettaglioAudit,
       esito: "OK",
     })
 
