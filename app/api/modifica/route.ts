@@ -1,6 +1,7 @@
 import { requireServerAuth } from "@/lib/auth-guard"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { writeAuditLog } from "@/lib/audit-log"
 
 function getSupabase() {
   return createClient(
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
       .trim()
 
     const km = body?.km === "" || body?.km == null ? null : Number(body.km)
+
     const numero_chiave =
       body?.numero_chiave === "" || body?.numero_chiave == null
         ? null
@@ -58,6 +60,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (!isValidTarga(nuovaTarga)) {
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Formato targa non valido",
+        esito: "KO",
+      })
+
       return NextResponse.json(
         { ok: false, error: "Formato targa non valido" },
         { status: 400 }
@@ -65,6 +75,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (!marca_modello) {
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Marca / modello obbligatorio mancante",
+        esito: "KO",
+      })
+
       return NextResponse.json(
         { ok: false, error: "Marca / modello obbligatorio" },
         { status: 400 }
@@ -72,6 +90,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (!colore) {
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Colore obbligatorio mancante",
+        esito: "KO",
+      })
+
       return NextResponse.json(
         { ok: false, error: "Colore obbligatorio" },
         { status: 400 }
@@ -79,6 +105,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (numero_chiave != null && (Number.isNaN(numero_chiave) || numero_chiave < 0)) {
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Numero chiave non valido",
+        esito: "KO",
+      })
+
       return NextResponse.json(
         { ok: false, error: "Numero chiave non valido" },
         { status: 400 }
@@ -94,6 +128,14 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (utenteError) {
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Errore lettura permessi utente",
+        esito: "KO",
+      })
+
       return NextResponse.json(
         { ok: false, error: utenteError.message },
         { status: 500 }
@@ -103,18 +145,12 @@ export async function POST(req: NextRequest) {
     const canModificaTarga = Boolean(utente?.can_modifica_targa)
 
     if (!canModificaTarga && nuovaTarga !== targaOriginale) {
-      const now = new Date().toISOString()
-
-      await supabase.from("audit_log_sistema").insert({
+      await writeAuditLog({
         operatore: auth.user,
-        azione: "MODIFICA NEGATA",
+        azione: "MODIFICA_VEICOLO",
         targa: targaOriginale,
-        numero_chiave: null,
-        zona_id: null,
-        zona_attuale: null,
         dettaglio: "Tentativo modifica targa senza autorizzazione",
         esito: "KO",
-        created_at: now,
       })
 
       return NextResponse.json(
@@ -131,6 +167,14 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (findError) {
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Errore ricerca vettura",
+        esito: "KO",
+      })
+
       return NextResponse.json(
         { ok: false, error: findError.message },
         { status: 500 }
@@ -138,6 +182,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (!veicoloAttuale) {
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Vettura non trovata o non presente",
+        esito: "KO",
+      })
+
       return NextResponse.json(
         { ok: false, error: "Vettura non trovata" },
         { status: 404 }
@@ -153,6 +205,14 @@ export async function POST(req: NextRequest) {
         .limit(1)
 
       if (targaDupError) {
+        await writeAuditLog({
+          operatore: auth.user,
+          azione: "MODIFICA_VEICOLO",
+          targa: targaOriginale,
+          dettaglio: "Errore controllo duplicato targa",
+          esito: "KO",
+        })
+
         return NextResponse.json(
           { ok: false, error: targaDupError.message },
           { status: 500 }
@@ -160,6 +220,14 @@ export async function POST(req: NextRequest) {
       }
 
       if (targaDuplicata && targaDuplicata.length > 0) {
+        await writeAuditLog({
+          operatore: auth.user,
+          azione: "MODIFICA_VEICOLO",
+          targa: targaOriginale,
+          dettaglio: `Targa già presente nel piazzale: ${nuovaTarga}`,
+          esito: "KO",
+        })
+
         return NextResponse.json(
           { ok: false, error: "Targa già presente nel piazzale" },
           { status: 409 }
@@ -180,6 +248,15 @@ export async function POST(req: NextRequest) {
         .limit(1)
 
       if (chiaveDupError) {
+        await writeAuditLog({
+          operatore: auth.user,
+          azione: "MODIFICA_VEICOLO",
+          targa: targaOriginale,
+          numero_chiave,
+          dettaglio: "Errore controllo duplicato numero chiave",
+          esito: "KO",
+        })
+
         return NextResponse.json(
           { ok: false, error: chiaveDupError.message },
           { status: 500 }
@@ -187,6 +264,15 @@ export async function POST(req: NextRequest) {
       }
 
       if (chiaveDuplicata && chiaveDuplicata.length > 0) {
+        await writeAuditLog({
+          operatore: auth.user,
+          azione: "MODIFICA_VEICOLO",
+          targa: targaOriginale,
+          numero_chiave,
+          dettaglio: `Numero chiave già assegnato a un'altra vettura: ${chiaveDuplicata[0].targa}`,
+          esito: "KO",
+        })
+
         return NextResponse.json(
           { ok: false, error: "Numero chiave già assegnato a un'altra vettura" },
           { status: 409 }
@@ -244,6 +330,17 @@ export async function POST(req: NextRequest) {
       .eq("stato", "PRESENTE")
 
     if (updateError) {
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        numero_chiave: numero_chiave ?? veicoloAttuale.numero_chiave ?? 0,
+        zona_id: veicoloAttuale.zona_id ?? null,
+        zona_attuale: veicoloAttuale.zona_attuale ?? null,
+        dettaglio: "Errore aggiornamento dati vettura",
+        esito: "KO",
+      })
+
       return NextResponse.json(
         { ok: false, error: updateError.message },
         { status: 500 }
@@ -261,16 +358,15 @@ export async function POST(req: NextRequest) {
       created_at: now,
     })
 
-    await supabase.from("audit_log_sistema").insert({
+    await writeAuditLog({
       operatore: auth.user,
-      azione: "MODIFICA",
+      azione: "MODIFICA_VEICOLO",
       targa: nuovaTarga,
       numero_chiave: numero_chiave ?? 0,
       zona_id: veicoloAttuale.zona_id ?? null,
       zona_attuale: veicoloAttuale.zona_attuale ?? null,
       dettaglio,
       esito: "OK",
-      created_at: now,
     })
 
     return NextResponse.json({
@@ -278,6 +374,13 @@ export async function POST(req: NextRequest) {
       message: "Dati aggiornati correttamente",
     })
   } catch {
+    await writeAuditLog({
+      operatore: "Sconosciuto",
+      azione: "MODIFICA_VEICOLO",
+      dettaglio: "Errore interno modifica",
+      esito: "KO",
+    })
+
     return NextResponse.json(
       { ok: false, error: "Errore interno modifica" },
       { status: 500 }
