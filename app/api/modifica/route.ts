@@ -103,6 +103,20 @@ export async function POST(req: NextRequest) {
     const canModificaTarga = Boolean(utente?.can_modifica_targa)
 
     if (!canModificaTarga && nuovaTarga !== targaOriginale) {
+      const now = new Date().toISOString()
+
+      await supabase.from("audit_log_sistema").insert({
+        operatore: auth.user,
+        azione: "MODIFICA NEGATA",
+        targa: targaOriginale,
+        numero_chiave: null,
+        zona_id: null,
+        zona_attuale: null,
+        dettaglio: "Tentativo modifica targa senza autorizzazione",
+        esito: "KO",
+        created_at: now,
+      })
+
       return NextResponse.json(
         { ok: false, error: "Non sei autorizzato a modificare la targa" },
         { status: 403 }
@@ -153,7 +167,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (numero_chiave != null && numero_chiave > 0 && numero_chiave !== veicoloAttuale.numero_chiave) {
+    if (
+      numero_chiave != null &&
+      numero_chiave > 0 &&
+      numero_chiave !== veicoloAttuale.numero_chiave
+    ) {
       const { data: chiaveDuplicata, error: chiaveDupError } = await supabase
         .from("parco_usato")
         .select("targa")
@@ -199,13 +217,28 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const now = new Date().toISOString()
+    const dettaglio = `Aggiornamento dati vettura`
+
     await supabase.from("log_movimenti").insert({
       targa: nuovaTarga,
       azione: "Modifica",
-      dettaglio: `Aggiornamento dati vettura`,
+      dettaglio,
       utente: auth.user,
       numero_chiave: numero_chiave ?? 0,
-      created_at: new Date().toISOString(),
+      created_at: now,
+    })
+
+    await supabase.from("audit_log_sistema").insert({
+      operatore: auth.user,
+      azione: "MODIFICA",
+      targa: nuovaTarga,
+      numero_chiave: numero_chiave ?? 0,
+      zona_id: veicoloAttuale.zona_id ?? null,
+      zona_attuale: veicoloAttuale.zona_attuale ?? null,
+      dettaglio,
+      esito: "OK",
+      created_at: now,
     })
 
     return NextResponse.json({
