@@ -72,6 +72,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [showScrollTop, setShowScrollTop] = useState(false)
 
   async function loadDashboard(nextPeriodo = periodo, nextOperatore = operatore) {
     setLoading(true)
@@ -105,6 +106,26 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDashboard()
   }, [])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300)
+    }
+
+    handleScroll()
+    window.addEventListener("scroll", handleScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+    }
+  }, [])
+
+  function scrollTop() {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    })
+  }
 
   const progressWidth = `${data?.chiavi.percentuale_occupazione ?? 0}%`
 
@@ -500,6 +521,17 @@ export default function DashboardPage() {
             ))}
         </div>
       </div>
+
+      {showScrollTop && (
+        <button
+          onClick={scrollTop}
+          aria-label="Torna su"
+          className="fixed right-5 bottom-24 md:bottom-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-violet-600 text-white shadow-xl transition-all duration-200 hover:bg-violet-700 active:scale-95 md:h-12 md:w-auto md:min-w-[124px] md:rounded-2xl md:px-4"
+        >
+          <span className="text-xl md:hidden">↑</span>
+          <span className="hidden text-sm font-semibold md:inline">Torna su</span>
+        </button>
+      )}
     </div>
   )
 }
