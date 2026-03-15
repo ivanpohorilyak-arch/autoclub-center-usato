@@ -40,9 +40,23 @@ export default function GestioneUtentiPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [editPin, setEditPin] = useState("")
+  const [showScrollTop, setShowScrollTop] = useState(false)
 
   useEffect(() => {
     loadAll()
+  }, [])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300)
+    }
+
+    handleScroll()
+    window.addEventListener("scroll", handleScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+    }
   }, [])
 
   async function loadAll() {
@@ -173,12 +187,9 @@ export default function GestioneUtentiPage() {
     setMessage("")
 
     try {
-      const res = await fetch(
-        `/api/gestione-utenti?id=${selectedUser.id}`,
-        {
-          method: "DELETE",
-        }
-      )
+      const res = await fetch(`/api/gestione-utenti?id=${selectedUser.id}`, {
+        method: "DELETE",
+      })
 
       const data = await res.json()
 
@@ -206,6 +217,13 @@ export default function GestioneUtentiPage() {
     setUsers((prev) =>
       prev.map((u) => (u.id === selectedUser.id ? { ...u, [key]: value } : u))
     )
+  }
+
+  function scrollTop() {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    })
   }
 
   return (
@@ -507,6 +525,17 @@ export default function GestioneUtentiPage() {
             </div>
           </div>
         </>
+      )}
+
+      {showScrollTop && (
+        <button
+          onClick={scrollTop}
+          aria-label="Torna su"
+          className="fixed right-5 bottom-24 md:bottom-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-violet-600 text-white shadow-xl transition-all duration-200 hover:bg-violet-700 active:scale-95 md:h-12 md:w-auto md:min-w-[124px] md:rounded-2xl md:px-4"
+        >
+          <span className="text-xl md:hidden">↑</span>
+          <span className="hidden text-sm font-semibold md:inline">Torna su</span>
+        </button>
       )}
     </div>
   )
