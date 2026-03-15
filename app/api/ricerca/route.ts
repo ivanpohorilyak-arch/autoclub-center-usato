@@ -2,9 +2,17 @@ import { requireServerAuth } from "@/lib/auth-guard"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
+
 export async function GET(req: NextRequest) {
   const auth = requireServerAuth()
   if (!auth.ok) return auth.response
+
   try {
     const q = (req.nextUrl.searchParams.get("q") || "").trim().toUpperCase()
 
@@ -15,11 +23,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
+    const supabase = getSupabase()
     const isNumeroChiave = /^[0-9]+$/.test(q)
 
     const query = supabase
@@ -33,7 +37,10 @@ export async function GET(req: NextRequest) {
       : await query.eq("targa", q)
 
     if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+      return NextResponse.json(
+        { ok: false, error: error.message },
+        { status: 500 }
+      )
     }
 
     if (!veicoli || veicoli.length === 0) {
@@ -53,15 +60,38 @@ export async function GET(req: NextRequest) {
       .limit(10)
 
     if (storicoError) {
-      return NextResponse.json({ ok: false, error: storicoError.message }, { status: 500 })
+      return NextResponse.json(
+        { ok: false, error: storicoError.message },
+        { status: 500 }
+      )
+    }
+
+    const { data: utente, error: utenteError } = await supabase
+      .from("utenti")
+      .select("nome, can_consegna, can_modifica_targa")
+      .eq("nome", auth.user)
+      .maybeSingle()
+
+    if (utenteError) {
+      return NextResponse.json(
+        { ok: false, error: utenteError.message },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({
       ok: true,
       veicolo,
       storico: storico ?? [],
+      permessi: {
+        can_consegna: Boolean(utente?.can_consegna),
+        can_modifica_targa: Boolean(utente?.can_modifica_targa),
+      },
     })
   } catch {
-    return NextResponse.json({ ok: false, error: "Errore interno ricerca" }, { status: 500 })
+    return NextResponse.json(
+      { ok: false, error: "Errore interno ricerca" },
+      { status: 500 }
+    )
   }
 }
