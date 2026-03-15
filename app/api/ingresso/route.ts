@@ -1,6 +1,23 @@
-import { requireServerAuth } from "@/lib/auth-guard"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { writeAuditLog } from "@/lib/audit-log"
+
+const ZONE_INFO: Record<string, string> = {
+  Z01: "Deposito N.9",
+  Z02: "Deposito N.7",
+  Z03: "Deposito N.6 (Lavaggisti)",
+  Z04: "Deposito unificato 1 e 2",
+  Z05: "Showroom",
+  Z06: "Vetture vendute",
+  Z07: "Piazzale Lavaggio",
+  Z08: "Commercianti senza telo",
+  Z09: "Commercianti con telo",
+  Z10: "Lavorazioni esterni",
+  Z11: "Verso altre sedi",
+  Z12: "Deposito N.10",
+  Z13: "Deposito N.8",
+  Z14: "Esterno (Con o Senza telo Motorsclub)",
+}
 
 function getSupabase() {
   return createClient(
@@ -10,125 +27,201 @@ function getSupabase() {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = requireServerAuth()
-  if (!auth.ok) return auth.response
-
   try {
     const body = await req.json()
-    const targa = String(body?.targa || "").trim().toUpperCase()
 
-    if (!targa) {
+    const targa = String(body.targa || "").trim().toUpperCase().replace(/\s+/g, "")
+    const marca = String(body.marca || "").trim().toUpperCase()
+    const modello = String(body.modello || "").trim().toUpperCase()
+    const colore = String(body.colore || "").trim()
+    const km = Number(body.km || 0)
+    const numeroChiave = Number(body.numeroChiave || 0)
+    const note = String(body.note || "").trim()
+    const zonaId = String(body.zonaId || "").trim().toUpperCase()
+    const operatore = String(body.operatore || "").trim() || "Operatore"
+
+    if (!/^[A-Z]{2}[0-9]{3}[A-Z]{2}$/.test(targa)) {
+      await writeAuditLog({
+        operatore,
+        azione: "INGRESSO_VEICOLO",
+        targa,
+        dettaglio: "Formato targa non valido",
+        esito: "KO",
+      })
+
       return NextResponse.json(
-        { ok: false, error: "Targa mancante" },
+        { ok: false, error: "Formato targa non valido" },
+        { status: 400 }
+      )
+    }
+
+    if (!zonaId || !ZONE_INFO[zonaId]) {
+      await writeAuditLog({
+        operatore,
+        azione: "INGRESSO_VEICOLO",
+        targa,
+        dettaglio: "Zona non valida",
+        esito: "KO",
+      })
+
+      return NextResponse.json(
+        { ok: false, error: "Zona non valida" },
         { status: 400 }
       )
     }
 
     const supabase = getSupabase()
 
-    const { data: utente, error: utenteError } = await supabase
-      .from("utenti")
-      .select("nome, can_consegna")
-      .eq("nome", auth.user)
-      .maybeSingle()
+    const { data: targaEsistente, error: errTarga } = await supabase
+      .from("parco_usato")
+      .select("targa")
+      .eq("targa", targa)
+      .eq("stato", "PRESENTE")
+      .limit(1)
 
-    if (utenteError) {
-      return NextResponse.json(
-        { ok: false, error: utenteError.message },
-        { status: 500 }
-      )
-    }
-
-    if (!utente?.can_consegna) {
-      const now = new Date().toISOString()
-
-      await supabase.from("audit_log_sistema").insert({
-        operatore: auth.user,
-        azione: "CONSEGNA NEGATA",
+    if (errTarga) {
+      await writeAuditLog({
+        operatore,
+        azione: "INGRESSO_VEICOLO",
         targa,
-        numero_chiave: null,
-        zona_id: null,
-        zona_attuale: null,
-        dettaglio: "Tentativo consegna senza autorizzazione",
+        zona_id: zonaId,
+        zona_attuale: ZONE_INFO[zonaId],
+        dettaglio: "Errore controllo targa esistente",
         esito: "KO",
-        created_at: now,
+      })
+
+      return NextResponse.json({ ok: false, error: errTarga.message }, { status: 500 })
+    }
+
+    if (targaEsistente && targaEsistente.length > 0) {
+      await writeAuditLog({
+        operatore,
+        azione: "INGRESSO_VEICOLO",
+        targa,
+        zona_id: zonaId,
+        zona_attuale: ZONE_INFO[zonaId],
+        dettaglio: "Targa già presente nel piazzale",
+        esito: "KO",
       })
 
       return NextResponse.json(
-        { ok: false, error: "Non sei autorizzato alla consegna" },
-        { status: 403 }
+        { ok: false, error: "Targa già presente nel piazzale" },
+        { status: 400 }
       )
     }
 
-    const { data: veicolo, error: findError } = await supabase
-      .from("parco_usato")
-      .select("targa, zona_id, zona_attuale, numero_chiave")
-      .eq("targa", targa)
-      .eq("stato", "PRESENTE")
-      .maybeSingle()
+    if (numeroChiave > 0) {
+      const { data: chiaveEsistente, error: errChiave } = await supabase
+        .from("parco_usato")
+        .select("targa")
+        .eq("numero_chiave", numeroChiave)
+        .eq("stato", "PRESENTE")
+        .limit(1)
 
-    if (findError) {
-      return NextResponse.json(
-        { ok: false, error: findError.message },
-        { status: 500 }
-      )
+      if (errChiave) {
+        await writeAuditLog({
+          operatore,
+          azione: "INGRESSO_VEICOLO",
+          targa,
+          numero_chiave: numeroChiave,
+          zona_id: zonaId,
+          zona_attuale: ZONE_INFO[zonaId],
+          dettaglio: "Errore controllo chiave esistente",
+          esito: "KO",
+        })
+
+        return NextResponse.json({ ok: false, error: errChiave.message }, { status: 500 })
+      }
+
+      if (chiaveEsistente && chiaveEsistente.length > 0) {
+        await writeAuditLog({
+          operatore,
+          azione: "INGRESSO_VEICOLO",
+          targa,
+          numero_chiave: numeroChiave,
+          zona_id: zonaId,
+          zona_attuale: ZONE_INFO[zonaId],
+          dettaglio: `Chiave ${numeroChiave} già occupata dalla vettura ${chiaveEsistente[0].targa}`,
+          esito: "KO",
+        })
+
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `La chiave ${numeroChiave} è già occupata dalla vettura ${chiaveEsistente[0].targa}`,
+          },
+          { status: 400 }
+        )
+      }
     }
 
-    if (!veicolo) {
-      return NextResponse.json(
-        { ok: false, error: "Vettura non trovata" },
-        { status: 404 }
-      )
+    const payload = {
+      targa,
+      marca_modello: `${marca} ${modello}`.trim(),
+      colore,
+      km,
+      numero_chiave: numeroChiave,
+      zona_id: zonaId,
+      zona_attuale: ZONE_INFO[zonaId],
+      data_ingresso: new Date().toISOString(),
+      note,
+      stato: "PRESENTE",
+      utente_ultimo_invio: operatore,
     }
 
-    const { error: updateError } = await supabase
-      .from("parco_usato")
-      .update({
-        stato: "CONSEGNATO",
-        numero_chiave: 0,
-        utente_ultimo_invio: auth.user,
+    const { error: insertError } = await supabase.from("parco_usato").insert(payload)
+
+    if (insertError) {
+      await writeAuditLog({
+        operatore,
+        azione: "INGRESSO_VEICOLO",
+        targa,
+        numero_chiave: numeroChiave,
+        zona_id: zonaId,
+        zona_attuale: ZONE_INFO[zonaId],
+        dettaglio: "Errore inserimento vettura in parco_usato",
+        esito: "KO",
       })
-      .eq("targa", targa)
-      .eq("stato", "PRESENTE")
 
-    if (updateError) {
       return NextResponse.json(
-        { ok: false, error: updateError.message },
+        { ok: false, error: insertError.message },
         { status: 500 }
       )
     }
 
     const now = new Date().toISOString()
-    const dettaglio = `Uscita da ${veicolo.zona_attuale || "-"}`
+    const dettaglio =
+      `Ingresso in ${ZONE_INFO[zonaId]} | ` +
+      `Chiave: ${numeroChiave === 0 ? "0 - Commerciante" : numeroChiave} | ` +
+      `Marca/Modello: ${`${marca} ${modello}`.trim()}`
 
     await supabase.from("log_movimenti").insert({
       targa,
-      azione: "Consegna",
+      azione: "Ingresso",
       dettaglio,
-      utente: auth.user,
-      numero_chiave: veicolo.numero_chiave ?? 0,
+      utente: operatore,
+      numero_chiave: numeroChiave,
       created_at: now,
     })
 
-    await supabase.from("audit_log_sistema").insert({
-      operatore: auth.user,
-      azione: "CONSEGNA",
+    await writeAuditLog({
+      operatore,
+      azione: "INGRESSO_VEICOLO",
       targa,
-      numero_chiave: veicolo.numero_chiave ?? 0,
-      zona_id: veicolo.zona_id ?? null,
-      zona_attuale: veicolo.zona_attuale ?? null,
+      numero_chiave: numeroChiave,
+      zona_id: zonaId,
+      zona_attuale: ZONE_INFO[zonaId],
       dettaglio,
       esito: "OK",
-      created_at: now,
     })
 
     return NextResponse.json({
       ok: true,
-      message: "Consegna registrata correttamente",
+      message: "Vettura registrata correttamente",
     })
   } catch {
     return NextResponse.json(
-      { ok: false, error: "Errore interno consegna" },
+      { ok: false, error: "Errore interno ingresso" },
       { status: 500 }
     )
   }
