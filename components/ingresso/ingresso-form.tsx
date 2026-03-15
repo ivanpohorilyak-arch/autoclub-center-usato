@@ -71,6 +71,7 @@ export function IngressoForm() {
   const [feedback, setFeedback] = useState("")
   const [salvataggioInCorso, setSalvataggioInCorso] = useState(false)
   const [savedVehicle, setSavedVehicle] = useState<SavedVehicle | null>(null)
+  const [showScrollTop, setShowScrollTop] = useState(false)
 
   const zonaNome = zonaId ? ZONE_INFO[zonaId] : ""
 
@@ -159,6 +160,19 @@ export function IngressoForm() {
       void stopZonaScanner()
     }
   }, [scannerZonaAttivo])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300)
+    }
+
+    handleScroll()
+    window.addEventListener("scroll", handleScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+    }
+  }, [])
 
   async function handleChiaveLibera() {
     try {
@@ -272,7 +286,6 @@ export function IngressoForm() {
 
       setFeedback("Vettura registrata correttamente.")
 
-      // reset mantenendo la zona già letta
       setTarga("")
       setMarca("")
       setModello("")
@@ -328,6 +341,13 @@ export function IngressoForm() {
       })
       targaInputRef.current?.focus()
     }, 250)
+  }
+
+  function scrollTop() {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    })
   }
 
   return (
@@ -602,6 +622,17 @@ export function IngressoForm() {
           </div>
         </form>
       </div>
+
+      {showScrollTop && (
+        <button
+          onClick={scrollTop}
+          aria-label="Torna su"
+          className="fixed right-5 bottom-24 md:bottom-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-violet-600 text-white shadow-xl transition-all duration-200 hover:bg-violet-700 active:scale-95 md:h-12 md:w-auto md:min-w-[124px] md:rounded-2xl md:px-4"
+        >
+          <span className="text-xl md:hidden">↑</span>
+          <span className="hidden text-sm font-semibold md:inline">Torna su</span>
+        </button>
+      )}
     </div>
   )
 }
