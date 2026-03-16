@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     const targa = String(body.targa || "").trim().toUpperCase()
     const zonaId = String(body.zonaId || "").trim().toUpperCase()
 
-    const operatore = req.cookies.get("autoclub_user")?.value || auth.user || "Operatore"
+    const operatore = auth.user
 
     if (!targa) {
       return NextResponse.json({ ok: false, error: "Targa mancante" }, { status: 400 })
