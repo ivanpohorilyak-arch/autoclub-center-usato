@@ -30,6 +30,16 @@ type AuditRecord = {
   esito: string
 }
 
+type AuditResponse = {
+  ok: boolean
+  records?: AuditRecordRaw[]
+  total?: number
+  limit?: number
+  offset?: number
+  hasMore?: boolean
+  error?: string
+}
+
 function normalizeRecord(r: AuditRecordRaw, index: number): AuditRecord {
   return {
     id: r.id ?? index + 1,
@@ -90,40 +100,116 @@ function getEsitoBadgeClass(esito: string) {
     : "bg-red-100 text-red-700"
 }
 
+const PAGE_SIZE = 250
+
 export default function AuditPage() {
   const [records, setRecords] = useState<AuditRecord[]>([])
   const [loading, setLoading] = useState(true)
-  const [query, setQuery] = useState("")
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError] = useState("")
   const [showScrollTop, setShowScrollTop] = useState(false)
+  const [totalAvailable, setTotalAvailable] = useState(0)
 
-  async function loadAudit() {
-    setLoading(true)
+  const [q, setQ] = useState("")
+  const [operatore, setOperatore] = useState("")
+  const [azione, setAzione] = useState("")
+  const [zona, setZona] = useState("")
+  const [dettaglio, setDettaglio] = useState("")
+  const [targa, setTarga] = useState("")
+  const [chiave, setChiave] = useState("")
+  const [dataDa, setDataDa] = useState("")
+  const [dataA, setDataA] = useState("")
+  const [hasMore, setHasMore] = useState(false)
+
+  function buildParams(offset = 0) {
+    const params = new URLSearchParams()
+
+    if (q.trim()) params.set("q", q.trim())
+    if (operatore.trim()) params.set("operatore", operatore.trim())
+    if (azione.trim()) params.set("azione", azione.trim())
+    if (zona.trim()) params.set("zona", zona.trim())
+    if (dettaglio.trim()) params.set("dettaglio", dettaglio.trim())
+    if (targa.trim()) params.set("targa", targa.trim().toUpperCase())
+    if (chiave.trim()) params.set("chiave", chiave.trim())
+    if (dataDa) params.set("data_da", dataDa)
+    if (dataA) params.set("data_a", dataA)
+
+    params.set("limit", String(PAGE_SIZE))
+    params.set("offset", String(offset))
+
+    return params.toString()
+  }
+
+  async function loadAudit(reset = true) {
+    if (reset) {
+      setLoading(true)
+      setError("")
+    } else {
+      setLoadingMore(true)
+    }
 
     try {
-      const res = await fetch(`/api/audit?q=${encodeURIComponent(query)}`, {
+      const offset = reset ? 0 : records.length
+
+      const res = await fetch(`/api/audit?${buildParams(offset)}`, {
         cache: "no-store",
       })
 
-      const data = await res.json()
+      const data: AuditResponse = await res.json()
 
       if (data?.ok) {
         const rawRecords: AuditRecordRaw[] = Array.isArray(data.records)
           ? data.records
           : []
 
-        setRecords(rawRecords.map((r, index) => normalizeRecord(r, index)))
+        const normalized = rawRecords.map((r, index) =>
+          normalizeRecord(r, offset + index)
+        )
+
+        if (reset) {
+          setRecords(normalized)
+        } else {
+          setRecords((prev) => [...prev, ...normalized])
+        }
+
+        setTotalAvailable(data.total || 0)
+        setHasMore(Boolean(data.hasMore))
+        setError("")
       } else {
-        setRecords([])
+        if (reset) {
+          setRecords([])
+        }
+        setTotalAvailable(0)
+        setHasMore(false)
+        setError(data?.error || "Errore caricamento audit.")
       }
     } catch {
-      setRecords([])
+      if (reset) {
+        setRecords([])
+      }
+      setTotalAvailable(0)
+      setHasMore(false)
+      setError("Errore di connessione.")
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }
 
+  function resetFiltri() {
+    setQ("")
+    setOperatore("")
+    setAzione("")
+    setZona("")
+    setDettaglio("")
+    setTarga("")
+    setChiave("")
+    setDataDa("")
+    setDataA("")
+  }
+
   useEffect(() => {
-    loadAudit()
+    loadAudit(true)
   }, [])
 
   useEffect(() => {
@@ -192,27 +278,104 @@ export default function AuditPage() {
         </p>
       </div>
 
-      <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_auto_auto]">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Cerca targa, operatore, azione o dettaglio..."
-          className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
-        />
+      <div className="mb-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Ricerca generale..."
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+          />
 
-        <button
-          onClick={loadAudit}
-          className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
-        >
-          Cerca
-        </button>
+          <input
+            value={operatore}
+            onChange={(e) => setOperatore(e.target.value)}
+            placeholder="Operatore"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+          />
 
-        <button
-          onClick={exportCSV}
-          className="rounded-2xl bg-slate-700 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-        >
-          Export CSV
-        </button>
+          <input
+            value={azione}
+            onChange={(e) => setAzione(e.target.value)}
+            placeholder="Azione"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+          />
+
+          <input
+            value={zona}
+            onChange={(e) => setZona(e.target.value)}
+            placeholder="Zona"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+          />
+
+          <input
+            value={targa}
+            onChange={(e) => setTarga(e.target.value.toUpperCase())}
+            placeholder="Targa"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm uppercase outline-none focus:border-blue-500"
+          />
+
+          <input
+            value={chiave}
+            onChange={(e) => setChiave(e.target.value.replace(/[^\d]/g, ""))}
+            placeholder="Chiave"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+          />
+
+          <input
+            value={dettaglio}
+            onChange={(e) => setDettaglio(e.target.value)}
+            placeholder="Dettaglio"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="date"
+              value={dataDa}
+              onChange={(e) => setDataDa(e.target.value)}
+              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+            />
+            <input
+              type="date"
+              value={dataA}
+              onChange={(e) => setDataA(e.target.value)}
+              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 md:flex-row">
+          <button
+            onClick={() => loadAudit(true)}
+            className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            Filtra
+          </button>
+
+          <button
+            onClick={() => {
+              resetFiltri()
+              setTimeout(() => loadAudit(true), 0)
+            }}
+            className="rounded-2xl bg-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-300"
+          >
+            Reset filtri
+          </button>
+
+          <button
+            onClick={exportCSV}
+            className="rounded-2xl bg-slate-700 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Export CSV
+          </button>
+        </div>
+
+        {error && (
+          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
       </div>
 
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
@@ -224,17 +387,24 @@ export default function AuditPage() {
         </div>
 
         <div className="rounded-3xl border border-slate-200 bg-white p-4">
+          <div className="text-sm text-slate-500">Totale disponibili</div>
+          <div className="mt-1 text-2xl font-bold text-slate-900">
+            {loading ? "..." : totalAvailable}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-4">
           <div className="text-sm text-slate-500">Ultimo aggiornamento</div>
           <div className="mt-1 text-base font-semibold text-slate-900">
             {new Date().toLocaleTimeString()}
           </div>
         </div>
+      </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-4">
-          <div className="text-sm text-slate-500">Modalità</div>
-          <div className="mt-1 text-base font-semibold text-slate-900">
-            Audit live
-          </div>
+      <div className="mb-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="text-sm text-slate-600">
+          Visualizzati <span className="font-semibold">{totalRecords}</span> di{" "}
+          <span className="font-semibold">{totalAvailable}</span> eventi.
         </div>
       </div>
 
@@ -394,6 +564,18 @@ export default function AuditPage() {
           </div>
         ))}
       </div>
+
+      {hasMore && !loading && (
+        <div className="mt-6 flex justify-center">
+          <button
+            onClick={() => loadAudit(false)}
+            disabled={loadingMore}
+            className="rounded-2xl bg-violet-600 px-6 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+          >
+            {loadingMore ? "Caricamento..." : "Carica altri 250"}
+          </button>
+        </div>
+      )}
 
       {showScrollTop && (
         <button
