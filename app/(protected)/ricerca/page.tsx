@@ -48,10 +48,14 @@ export default function RicercaPage() {
     can_modifica_targa: false,
   })
 
-  const [azioneAttiva, setAzioneAttiva] = useState<"sposta" | "modifica" | "consegna" | null>(null)
+  const [azioneAttiva, setAzioneAttiva] = useState<"sposta" | "modifica" | "consegna" | null>(
+    null
+  )
+  const [azioneEvidenza, setAzioneEvidenza] = useState("")
 
   const [zonaScansionata, setZonaScansionata] = useState<ScanResult | null>(null)
   const [notaSpostamento, setNotaSpostamento] = useState("")
+  const [confermaSpostamento, setConfermaSpostamento] = useState(false)
   const [processing, setProcessing] = useState(false)
 
   const [formModifica, setFormModifica] = useState({
@@ -78,7 +82,10 @@ export default function RicercaPage() {
     setVettura(null)
     setStorico([])
     setAzioneAttiva(null)
+    setAzioneEvidenza("")
     setZonaScansionata(null)
+    setNotaSpostamento("")
+    setConfermaSpostamento(false)
     setConfermaModifica(false)
     setConfermaConsegna(false)
 
@@ -145,6 +152,16 @@ export default function RicercaPage() {
     return () => window.clearTimeout(t)
   }, [azioneAttiva])
 
+  useEffect(() => {
+    if (!azioneEvidenza) return
+
+    const timer = window.setTimeout(() => {
+      setAzioneEvidenza("")
+    }, 2400)
+
+    return () => window.clearTimeout(timer)
+  }, [azioneEvidenza])
+
   function resetMessaggi() {
     setError("")
     setMessage("")
@@ -154,11 +171,25 @@ export default function RicercaPage() {
     resetMessaggi()
     setAzioneAttiva(tipo)
     setZonaScansionata(null)
+    setNotaSpostamento("")
+    setConfermaSpostamento(false)
     setConfermaModifica(false)
     setConfermaConsegna(false)
+
+    if (tipo === "sposta") {
+      setAzioneEvidenza("Sezione spostamento aperta sotto")
+    }
+
+    if (tipo === "modifica") {
+      setAzioneEvidenza("Sezione modifica aperta sotto")
+    }
+
+    if (tipo === "consegna") {
+      setAzioneEvidenza("Sezione consegna aperta sotto")
+    }
   }
 
-  async function confermaSpostamento() {
+  async function confermaMovimento() {
     if (!vettura || !zonaScansionata) return
 
     setProcessing(true)
@@ -190,6 +221,7 @@ export default function RicercaPage() {
       setAzioneAttiva(null)
       setZonaScansionata(null)
       setNotaSpostamento("")
+      setConfermaSpostamento(false)
     } catch {
       setError("Errore di connessione durante lo spostamento.")
     } finally {
@@ -211,7 +243,11 @@ export default function RicercaPage() {
     }
 
     pushIfChanged("Targa", vettura.targa, formModifica.targa.toUpperCase())
-    pushIfChanged("Marca / Modello", vettura.marca_modello, formModifica.marca_modello.toUpperCase())
+    pushIfChanged(
+      "Marca / Modello",
+      vettura.marca_modello,
+      formModifica.marca_modello.toUpperCase()
+    )
     pushIfChanged("Colore", vettura.colore, formModifica.colore)
     pushIfChanged("KM", vettura.km, formModifica.km)
     pushIfChanged("Numero chiave", vettura.numero_chiave, formModifica.numero_chiave)
@@ -313,9 +349,7 @@ export default function RicercaPage() {
 
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-slate-900">Ricerca</h1>
-        <p className="text-sm text-slate-500">
-          Ricerca vettura per targa o numero chiave
-        </p>
+        <p className="text-sm text-slate-500">Ricerca vettura per targa o numero chiave</p>
       </div>
 
       <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -347,6 +381,12 @@ export default function RicercaPage() {
             {message}
           </div>
         )}
+
+        {azioneEvidenza && (
+          <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-700">
+            {azioneEvidenza}
+          </div>
+        )}
       </div>
 
       {vettura && (
@@ -362,9 +402,7 @@ export default function RicercaPage() {
 
               <div className="text-sm text-slate-500">
                 Stato:{" "}
-                <span className="font-semibold text-slate-900">
-                  {vettura.stato || "—"}
-                </span>
+                <span className="font-semibold text-slate-900">{vettura.stato || "—"}</span>
               </div>
             </div>
 
@@ -385,16 +423,12 @@ export default function RicercaPage() {
 
               <div className="rounded-2xl bg-slate-50 p-4">
                 <div className="text-sm text-slate-500">Colore</div>
-                <div className="text-lg font-semibold text-slate-900">
-                  {vettura.colore || "-"}
-                </div>
+                <div className="text-lg font-semibold text-slate-900">{vettura.colore || "-"}</div>
               </div>
 
               <div className="rounded-2xl bg-slate-50 p-4">
                 <div className="text-sm text-slate-500">KM</div>
-                <div className="text-lg font-semibold text-slate-900">
-                  {vettura.km ?? "-"}
-                </div>
+                <div className="text-lg font-semibold text-slate-900">{vettura.km ?? "-"}</div>
               </div>
             </div>
 
@@ -443,9 +477,7 @@ export default function RicercaPage() {
                       </div>
                     </div>
 
-                    <div className="mt-2 text-sm text-slate-700">
-                      {r.dettaglio || "-"}
-                    </div>
+                    <div className="mt-2 text-sm text-slate-700">{r.dettaglio || "-"}</div>
 
                     <div className="mt-2 text-xs text-slate-500">
                       Utente: {r.utente || "-"} · Chiave: {r.numero_chiave ?? "-"}
@@ -469,6 +501,7 @@ export default function RicercaPage() {
                 <QrZoneScanner
                   onDetected={(result) => {
                     setZonaScansionata(result)
+                    setConfermaSpostamento(false)
                     resetMessaggi()
                   }}
                 />
@@ -483,6 +516,30 @@ export default function RicercaPage() {
                 </div>
               )}
 
+              {zonaScansionata && vettura && (
+                <div className="mt-4 rounded-2xl bg-amber-50 p-4">
+                  <div className="mb-2 text-sm font-semibold text-slate-900">
+                    Riepilogo spostamento
+                  </div>
+                  <div className="space-y-2 text-sm text-slate-700">
+                    <div>
+                      <span className="font-medium">Targa:</span> {vettura.targa}
+                    </div>
+                    <div>
+                      <span className="font-medium">Da:</span>{" "}
+                      {vettura.zona_attuale || vettura.zona_id || "-"}
+                    </div>
+                    <div>
+                      <span className="font-medium">A:</span>{" "}
+                      {zonaScansionata.zonaId} - {zonaScansionata.zonaNome}
+                    </div>
+                    <div>
+                      <span className="font-medium">Chiave:</span> {vettura.numero_chiave ?? "-"}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <textarea
                 value={notaSpostamento}
                 onChange={(e) => setNotaSpostamento(e.target.value)}
@@ -490,10 +547,21 @@ export default function RicercaPage() {
                 className="mt-4 w-full rounded-2xl border border-slate-300 px-4 py-3 text-base outline-none focus:border-amber-500"
               />
 
+              {zonaScansionata && (
+                <label className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={confermaSpostamento}
+                    onChange={(e) => setConfermaSpostamento(e.target.checked)}
+                  />
+                  Confermo lo spostamento della vettura nella nuova zona rilevata
+                </label>
+              )}
+
               <div className="mt-4 flex flex-col gap-3 md:flex-row">
                 <button
-                  onClick={confermaSpostamento}
-                  disabled={!zonaScansionata || processing}
+                  onClick={confermaMovimento}
+                  disabled={!zonaScansionata || !confermaSpostamento || processing}
                   className="rounded-2xl bg-amber-500 px-5 py-3 font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
                 >
                   {processing ? "Spostamento..." : "Conferma spostamento"}
@@ -504,6 +572,7 @@ export default function RicercaPage() {
                     setAzioneAttiva(null)
                     setZonaScansionata(null)
                     setNotaSpostamento("")
+                    setConfermaSpostamento(false)
                   }}
                   className="rounded-2xl bg-slate-200 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-300"
                 >
@@ -519,9 +588,7 @@ export default function RicercaPage() {
 
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Targa
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Targa</label>
                   <input
                     value={formModifica.targa}
                     onChange={(e) =>
@@ -557,9 +624,7 @@ export default function RicercaPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Colore
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Colore</label>
                   <input
                     value={formModifica.colore}
                     onChange={(e) =>
@@ -573,9 +638,7 @@ export default function RicercaPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    KM
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">KM</label>
                   <input
                     value={formModifica.km}
                     onChange={(e) =>
@@ -605,9 +668,7 @@ export default function RicercaPage() {
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Note
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Note</label>
                   <textarea
                     value={formModifica.note}
                     onChange={(e) =>
