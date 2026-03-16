@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { writeAuditLog } from "@/lib/audit-log"
+import { requireServerAuth } from "@/lib/auth-guard"
 
 const ZONE_INFO: Record<string, string> = {
   Z01: "Deposito N.9",
@@ -27,6 +28,9 @@ function getSupabase() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = requireServerAuth()
+  if (!auth.ok) return auth.response
+
   try {
     const body = await req.json()
 
@@ -38,7 +42,7 @@ export async function POST(req: NextRequest) {
     const numeroChiave = Number(body.numeroChiave || 0)
     const note = String(body.note || "").trim()
     const zonaId = String(body.zonaId || "").trim().toUpperCase()
-    const operatore = String(body.operatore || "").trim() || "Operatore"
+    const operatore = auth.user
 
     if (!/^[A-Z]{2}[0-9]{3}[A-Z]{2}$/.test(targa)) {
       await writeAuditLog({
@@ -90,7 +94,10 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json({ ok: false, error: errTarga.message }, { status: 500 })
+      return NextResponse.json(
+        { ok: false, error: errTarga.message },
+        { status: 500 }
+      )
     }
 
     if (targaEsistente && targaEsistente.length > 0) {
@@ -130,7 +137,10 @@ export async function POST(req: NextRequest) {
           esito: "KO",
         })
 
-        return NextResponse.json({ ok: false, error: errChiave.message }, { status: 500 })
+        return NextResponse.json(
+          { ok: false, error: errChiave.message },
+          { status: 500 }
+        )
       }
 
       if (chiaveEsistente && chiaveEsistente.length > 0) {
