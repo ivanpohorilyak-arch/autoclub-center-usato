@@ -51,9 +51,9 @@ export default function RicercaPage() {
   const [azioneAttiva, setAzioneAttiva] = useState<"sposta" | "modifica" | "consegna" | null>(
     null
   )
-  const [azioneEvidenza, setAzioneEvidenza] = useState("")
 
   const [zonaScansionata, setZonaScansionata] = useState<ScanResult | null>(null)
+  const [scannerSpostamentoAttivo, setScannerSpostamentoAttivo] = useState(false)
   const [notaSpostamento, setNotaSpostamento] = useState("")
   const [confermaSpostamento, setConfermaSpostamento] = useState(false)
   const [processing, setProcessing] = useState(false)
@@ -82,8 +82,8 @@ export default function RicercaPage() {
     setVettura(null)
     setStorico([])
     setAzioneAttiva(null)
-    setAzioneEvidenza("")
     setZonaScansionata(null)
+    setScannerSpostamentoAttivo(false)
     setNotaSpostamento("")
     setConfermaSpostamento(false)
     setConfermaModifica(false)
@@ -152,16 +152,6 @@ export default function RicercaPage() {
     return () => window.clearTimeout(t)
   }, [azioneAttiva])
 
-  useEffect(() => {
-    if (!azioneEvidenza) return
-
-    const timer = window.setTimeout(() => {
-      setAzioneEvidenza("")
-    }, 2400)
-
-    return () => window.clearTimeout(timer)
-  }, [azioneEvidenza])
-
   function resetMessaggi() {
     setError("")
     setMessage("")
@@ -171,22 +161,11 @@ export default function RicercaPage() {
     resetMessaggi()
     setAzioneAttiva(tipo)
     setZonaScansionata(null)
+    setScannerSpostamentoAttivo(false)
     setNotaSpostamento("")
     setConfermaSpostamento(false)
     setConfermaModifica(false)
     setConfermaConsegna(false)
-
-    if (tipo === "sposta") {
-      setAzioneEvidenza("Sezione spostamento aperta sotto")
-    }
-
-    if (tipo === "modifica") {
-      setAzioneEvidenza("Sezione modifica aperta sotto")
-    }
-
-    if (tipo === "consegna") {
-      setAzioneEvidenza("Sezione consegna aperta sotto")
-    }
   }
 
   async function confermaMovimento() {
@@ -220,6 +199,7 @@ export default function RicercaPage() {
       await cerca()
       setAzioneAttiva(null)
       setZonaScansionata(null)
+      setScannerSpostamentoAttivo(false)
       setNotaSpostamento("")
       setConfermaSpostamento(false)
     } catch {
@@ -381,12 +361,6 @@ export default function RicercaPage() {
             {message}
           </div>
         )}
-
-        {azioneEvidenza && (
-          <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-700">
-            {azioneEvidenza}
-          </div>
-        )}
       </div>
 
       {vettura && (
@@ -402,7 +376,9 @@ export default function RicercaPage() {
 
               <div className="text-sm text-slate-500">
                 Stato:{" "}
-                <span className="font-semibold text-slate-900">{vettura.stato || "—"}</span>
+                <span className="font-semibold text-slate-900">
+                  {vettura.stato || "—"}
+                </span>
               </div>
             </div>
 
@@ -423,12 +399,16 @@ export default function RicercaPage() {
 
               <div className="rounded-2xl bg-slate-50 p-4">
                 <div className="text-sm text-slate-500">Colore</div>
-                <div className="text-lg font-semibold text-slate-900">{vettura.colore || "-"}</div>
+                <div className="text-lg font-semibold text-slate-900">
+                  {vettura.colore || "-"}
+                </div>
               </div>
 
               <div className="rounded-2xl bg-slate-50 p-4">
                 <div className="text-sm text-slate-500">KM</div>
-                <div className="text-lg font-semibold text-slate-900">{vettura.km ?? "-"}</div>
+                <div className="text-lg font-semibold text-slate-900">
+                  {vettura.km ?? "-"}
+                </div>
               </div>
             </div>
 
@@ -477,7 +457,9 @@ export default function RicercaPage() {
                       </div>
                     </div>
 
-                    <div className="mt-2 text-sm text-slate-700">{r.dettaglio || "-"}</div>
+                    <div className="mt-2 text-sm text-slate-700">
+                      {r.dettaglio || "-"}
+                    </div>
 
                     <div className="mt-2 text-xs text-slate-500">
                       Utente: {r.utente || "-"} · Chiave: {r.numero_chiave ?? "-"}
@@ -497,15 +479,46 @@ export default function RicercaPage() {
                 Lo spostamento è possibile solo con scansione del QR della nuova zona.
               </p>
 
-              <div className="mt-4">
-                <QrZoneScanner
-                  onDetected={(result) => {
-                    setZonaScansionata(result)
-                    setConfermaSpostamento(false)
-                    resetMessaggi()
-                  }}
-                />
-              </div>
+              {!scannerSpostamentoAttivo && !zonaScansionata && (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="text-sm text-amber-800">
+                    Per una scansione stabile su mobile, attiva manualmente lo scanner QR.
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setScannerSpostamentoAttivo(true)}
+                    className="mt-3 rounded-2xl bg-amber-500 px-5 py-3 font-semibold text-white hover:bg-amber-600"
+                  >
+                    Attiva scanner QR
+                  </button>
+                </div>
+              )}
+
+              {scannerSpostamentoAttivo && (
+                <div className="mt-4">
+                  <QrZoneScanner
+                    onDetected={(result) => {
+                      setZonaScansionata(result)
+                      setScannerSpostamentoAttivo(false)
+                      setConfermaSpostamento(false)
+                      resetMessaggi()
+                    }}
+                  />
+                </div>
+              )}
+
+              {scannerSpostamentoAttivo && (
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setScannerSpostamentoAttivo(false)}
+                    className="rounded-2xl bg-slate-200 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-300"
+                  >
+                    Ferma scanner
+                  </button>
+                </div>
+              )}
 
               {zonaScansionata && (
                 <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
@@ -534,10 +547,25 @@ export default function RicercaPage() {
                       {zonaScansionata.zonaId} - {zonaScansionata.zonaNome}
                     </div>
                     <div>
-                      <span className="font-medium">Chiave:</span> {vettura.numero_chiave ?? "-"}
+                      <span className="font-medium">Chiave:</span>{" "}
+                      {vettura.numero_chiave ?? "-"}
                     </div>
                   </div>
                 </div>
+              )}
+
+              {zonaScansionata && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setZonaScansionata(null)
+                    setConfermaSpostamento(false)
+                    setScannerSpostamentoAttivo(true)
+                  }}
+                  className="mt-4 rounded-2xl bg-violet-600 px-5 py-3 font-semibold text-white hover:bg-violet-700"
+                >
+                  Scansiona di nuovo
+                </button>
               )}
 
               <textarea
@@ -571,6 +599,7 @@ export default function RicercaPage() {
                   onClick={() => {
                     setAzioneAttiva(null)
                     setZonaScansionata(null)
+                    setScannerSpostamentoAttivo(false)
                     setNotaSpostamento("")
                     setConfermaSpostamento(false)
                   }}
@@ -588,7 +617,9 @@ export default function RicercaPage() {
 
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Targa</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Targa
+                  </label>
                   <input
                     value={formModifica.targa}
                     onChange={(e) =>
@@ -624,7 +655,9 @@ export default function RicercaPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Colore</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Colore
+                  </label>
                   <input
                     value={formModifica.colore}
                     onChange={(e) =>
@@ -638,7 +671,9 @@ export default function RicercaPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">KM</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    KM
+                  </label>
                   <input
                     value={formModifica.km}
                     onChange={(e) =>
@@ -668,7 +703,9 @@ export default function RicercaPage() {
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Note</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Note
+                  </label>
                   <textarea
                     value={formModifica.note}
                     onChange={(e) =>
