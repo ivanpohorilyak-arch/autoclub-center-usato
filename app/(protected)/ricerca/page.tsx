@@ -36,9 +36,32 @@ type ScanResult = {
   rawValue: string
 }
 
+type Suggerimento = {
+  targa: string
+  marca_modello: string | null
+  colore: string | null
+  numero_chiave: number | null
+  zona_attuale: string | null
+  stato: string | null
+}
+
+type RicercaRecente = {
+  id: number
+  query: string
+  targa: string | null
+  numero_chiave: number | null
+  marca_modello: string | null
+  colore: string | null
+  stato: string | null
+  created_at: string
+}
+
 export default function RicercaPage() {
   const [query, setQuery] = useState("")
+  const [debouncedQuery, setDebouncedQuery] = useState("")
   const [loading, setLoading] = useState(false)
+  const [loadingSuggerimenti, setLoadingSuggerimenti] = useState(false)
+  const [loadingRecenti, setLoadingRecenti] = useState(false)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
   const [vettura, setVettura] = useState<Vettura | null>(null)
@@ -47,6 +70,10 @@ export default function RicercaPage() {
     can_consegna: false,
     can_modifica_targa: false,
   })
+
+  const [recenti, setRecenti] = useState<RicercaRecente[]>([])
+  const [suggerimenti, setSuggerimenti] = useState<Suggerimento[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
 
   const [azioneAttiva, setAzioneAttiva] = useState<"sposta" | "modifica" | "consegna" | null>(
     null
@@ -72,9 +99,75 @@ export default function RicercaPage() {
   const [showScrollTop, setShowScrollTop] = useState(false)
 
   const actionSectionRef = useRef<HTMLDivElement | null>(null)
+  const searchAreaRef = useRef<HTMLDivElement | null>(null)
 
-  async function cerca() {
-    if (!query.trim()) return
+  async function caricaRecenti() {
+    setLoadingRecenti(true)
+
+    try {
+      const res = await fetch("/api/ricerca?recent=true", {
+        cache: "no-store",
+      })
+
+      const json = await res.json()
+
+      if (!res.ok || !json.ok) {
+        setRecenti([])
+        return
+      }
+
+      setRecenti(json.recenti || [])
+    } catch {
+      setRecenti([])
+    } finally {
+      setLoadingRecenti(false)
+    }
+  }
+
+  async function caricaSuggerimenti(searchValue: string) {
+    const q = searchValue.trim()
+
+    if (!q) {
+      setSuggerimenti([])
+      return
+    }
+
+    setLoadingSuggerimenti(true)
+
+    try {
+      const res = await fetch(`/api/ricerca?suggest=true&q=${encodeURIComponent(q)}`, {
+        cache: "no-store",
+      })
+
+      const json = await res.json()
+
+      if (!res.ok || !json.ok) {
+        setSuggerimenti([])
+        return
+      }
+
+      setSuggerimenti(json.suggerimenti || [])
+    } catch {
+      setSuggerimenti([])
+    } finally {
+      setLoadingSuggerimenti(false)
+    }
+  }
+
+  async function cerca(forcedQuery?: string) {
+    const searchValue = (forcedQuery ?? query).trim()
+
+    if (!searchValue) {
+      setError("")
+      setMessage("")
+      setVettura(null)
+      setStorico([])
+      setAzioneAttiva(null)
+      setSuggerimenti([])
+      setShowSuggestions(true)
+      await caricaRecenti()
+      return
+    }
 
     setLoading(true)
     setError("")
@@ -88,9 +181,10 @@ export default function RicercaPage() {
     setConfermaSpostamento(false)
     setConfermaModifica(false)
     setConfermaConsegna(false)
+    setShowSuggestions(false)
 
     try {
-      const res = await fetch(`/api/ricerca?q=${encodeURIComponent(query)}`, {
+      const res = await fetch(`/api/ricerca?q=${encodeURIComponent(searchValue)}`, {
         cache: "no-store",
       })
 
@@ -98,9 +192,14 @@ export default function RicercaPage() {
 
       if (!res.ok || !json.ok) {
         setError(json.error || "Vettura non trovata.")
+        setVettura(null)
+        setStorico([])
+        setShowSuggestions(true)
+        await caricaRecenti()
         return
       }
 
+      setQuery(json.veicolo.targa || searchValue)
       setVettura(json.veicolo)
       setStorico(json.storico || [])
       setPermessi(
@@ -119,12 +218,41 @@ export default function RicercaPage() {
           json.veicolo.numero_chiave != null ? String(json.veicolo.numero_chiave) : "",
         note: json.veicolo.note || "",
       })
+
+      await caricaRecenti()
     } catch {
       setError("Errore di connessione.")
+      setShowSuggestions(true)
+      await caricaRecenti()
     } finally {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    void caricaRecenti()
+  }, [])
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setDebouncedQuery(query)
+    }, 350)
+
+    return () => window.clearTimeout(t)
+  }, [query])
+
+  useEffect(() => {
+    const q = debouncedQuery.trim()
+
+    if (!q) {
+      setSuggerimenti([])
+      setShowSuggestions(true)
+      return
+    }
+
+    void caricaSuggerimenti(q)
+    setShowSuggestions(true)
+  }, [debouncedQuery])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -151,6 +279,20 @@ export default function RicercaPage() {
 
     return () => window.clearTimeout(t)
   }, [azioneAttiva])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!searchAreaRef.current) return
+      if (!searchAreaRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [])
 
   function resetMessaggi() {
     setError("")
@@ -196,7 +338,7 @@ export default function RicercaPage() {
 
       setMessage(`Vettura spostata correttamente in ${json.nuovaZona}.`)
       setQuery(vettura.targa)
-      await cerca()
+      await cerca(vettura.targa)
       setAzioneAttiva(null)
       setZonaScansionata(null)
       setScannerSpostamentoAttivo(false)
@@ -269,7 +411,7 @@ export default function RicercaPage() {
 
       setMessage("Dati vettura aggiornati correttamente.")
       setQuery(formModifica.targa.toUpperCase())
-      await cerca()
+      await cerca(formModifica.targa.toUpperCase())
       setAzioneAttiva(null)
       setConfermaModifica(false)
     } catch {
@@ -309,6 +451,8 @@ export default function RicercaPage() {
       setAzioneAttiva(null)
       setConfermaConsegna(false)
       setQuery("")
+      setShowSuggestions(true)
+      await caricaRecenti()
     } catch {
       setError("Errore di connessione durante la consegna.")
     } finally {
@@ -323,6 +467,22 @@ export default function RicercaPage() {
     })
   }
 
+  function handleSelectSuggerimento(item: Suggerimento) {
+    setQuery(item.targa)
+    setSuggerimenti([])
+    setShowSuggestions(false)
+    void cerca(item.targa)
+  }
+
+  function handleSelectRecente(item: RicercaRecente) {
+    const nextValue =
+      item.targa || (item.numero_chiave != null ? String(item.numero_chiave) : item.query)
+
+    setQuery(nextValue)
+    setShowSuggestions(false)
+    void cerca(nextValue)
+  }
+
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
       <Topbar />
@@ -332,17 +492,32 @@ export default function RicercaPage() {
         <p className="text-sm text-slate-500">Ricerca vettura per targa o numero chiave</p>
       </div>
 
-      <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div
+        ref={searchAreaRef}
+        className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+      >
         <div className="flex flex-col gap-3 md:flex-row">
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value.toUpperCase())
+              setError("")
+              setMessage("")
+              setShowSuggestions(true)
+            }}
+            onFocus={() => setShowSuggestions(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                void cerca()
+              }
+            }}
             placeholder="Inserisci targa o numero chiave..."
             className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base outline-none focus:border-violet-500"
           />
 
           <button
-            onClick={cerca}
+            onClick={() => void cerca()}
             disabled={loading}
             className="rounded-2xl bg-violet-600 px-6 py-3 font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
           >
@@ -350,9 +525,148 @@ export default function RicercaPage() {
           </button>
         </div>
 
+        {showSuggestions && !vettura && (
+          <div className="mt-4 space-y-3">
+            {query.trim() ? (
+              <>
+                <div className="text-sm font-semibold text-slate-700">
+                  Suggerimenti ricerca
+                </div>
+
+                {loadingSuggerimenti ? (
+                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+                    Caricamento suggerimenti...
+                  </div>
+                ) : suggerimenti.length === 0 ? (
+                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+                    Nessun suggerimento disponibile.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {suggerimenti.map((item) => (
+                      <button
+                        key={`${item.targa}-${item.numero_chiave ?? "na"}`}
+                        type="button"
+                        onClick={() => handleSelectSuggerimento(item)}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left hover:bg-slate-100"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-base font-bold text-slate-900">
+                              {item.targa}
+                            </div>
+                            <div className="mt-1 text-sm text-slate-600">
+                              {item.marca_modello || "-"}
+                            </div>
+                          </div>
+
+                          <div className="text-right text-sm text-slate-500">
+                            <div>Chiave: {item.numero_chiave ?? "-"}</div>
+                            <div>{item.zona_attuale || "-"}</div>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
+                  Nessuna ricerca attiva. Puoi riprendere rapidamente da una delle tue ultime ricerche.
+                </div>
+
+                <div className="text-sm font-semibold text-slate-700">
+                  Le tue ultime ricerche
+                </div>
+
+                {loadingRecenti ? (
+                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+                    Caricamento ultime ricerche...
+                  </div>
+                ) : recenti.length === 0 ? (
+                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+                    Nessuna ricerca recente disponibile.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {recenti.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleSelectRecente(item)}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left hover:bg-slate-100"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-base font-bold text-slate-900">
+                              {item.targa || item.query}
+                            </div>
+                            <div className="mt-1 text-sm text-slate-600">
+                              {item.marca_modello || "Ricerca salvata"}
+                            </div>
+                          </div>
+
+                          <div className="text-right text-sm text-slate-500">
+                            <div>
+                              {item.numero_chiave != null
+                                ? `Chiave: ${item.numero_chiave}`
+                                : "Chiave: -"}
+                            </div>
+                            <div>{new Date(item.created_at).toLocaleString()}</div>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {error && (
           <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
+          </div>
+        )}
+
+        {error && recenti.length > 0 && !vettura && (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 text-sm font-semibold text-slate-900">
+              Ultime ricerche disponibili
+            </div>
+
+            <div className="space-y-2">
+              {recenti.map((item) => (
+                <button
+                  key={`errore-recente-${item.id}`}
+                  type="button"
+                  onClick={() => handleSelectRecente(item)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left hover:bg-slate-100"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-base font-bold text-slate-900">
+                        {item.targa || item.query}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        {item.marca_modello || "Ricerca salvata"}
+                      </div>
+                    </div>
+
+                    <div className="text-right text-sm text-slate-500">
+                      <div>
+                        {item.numero_chiave != null
+                          ? `Chiave: ${item.numero_chiave}`
+                          : "Chiave: -"}
+                      </div>
+                      <div>{new Date(item.created_at).toLocaleString()}</div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
