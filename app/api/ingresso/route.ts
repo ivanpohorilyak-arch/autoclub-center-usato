@@ -78,9 +78,8 @@ export async function POST(req: NextRequest) {
 
     const { data: targaEsistente, error: errTarga } = await supabase
       .from("parco_usato")
-      .select("targa")
+      .select("targa, stato")
       .eq("targa", targa)
-      .eq("stato", "PRESENTE")
       .limit(1)
 
     if (errTarga) {
@@ -107,12 +106,15 @@ export async function POST(req: NextRequest) {
         targa,
         zona_id: zonaId,
         zona_attuale: ZONE_INFO[zonaId],
-        dettaglio: "Targa già presente nel piazzale",
+        dettaglio: `Targa già presente in archivio con stato ${targaEsistente[0].stato || "-"}`,
         esito: "KO",
       })
 
       return NextResponse.json(
-        { ok: false, error: "Targa già presente nel piazzale" },
+        {
+          ok: false,
+          error: `La targa ${targa} è già presente in archivio.`,
+        },
         { status: 400 }
       )
     }
