@@ -74,6 +74,41 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    if (!Number.isFinite(km) || !Number.isInteger(km) || km < 0 || km > 1000000) {
+      await writeAuditLog({
+        operatore,
+        azione: "INGRESSO_VEICOLO",
+        targa,
+        dettaglio: `KM non validi: ${String(body.km ?? "")}`,
+        esito: "KO",
+      })
+
+      return NextResponse.json(
+        { ok: false, error: "KM non validi" },
+        { status: 400 }
+      )
+    }
+
+    if (
+      !Number.isFinite(numeroChiave) ||
+      !Number.isInteger(numeroChiave) ||
+      numeroChiave < 0 ||
+      numeroChiave > 9999
+    ) {
+      await writeAuditLog({
+        operatore,
+        azione: "INGRESSO_VEICOLO",
+        targa,
+        dettaglio: `Numero chiave non valido: ${String(body.numeroChiave ?? "")}`,
+        esito: "KO",
+      })
+
+      return NextResponse.json(
+        { ok: false, error: "Numero chiave non valido" },
+        { status: 400 }
+      )
+    }
+
     const supabase = getSupabase()
 
     const { data: targaEsistente, error: errTarga } = await supabase
@@ -184,6 +219,8 @@ export async function POST(req: NextRequest) {
     const { error: insertError } = await supabase.from("parco_usato").insert(payload)
 
     if (insertError) {
+      console.error("Errore insert parco_usato:", insertError)
+
       await writeAuditLog({
         operatore,
         azione: "INGRESSO_VEICOLO",
@@ -207,7 +244,7 @@ export async function POST(req: NextRequest) {
       `Chiave: ${numeroChiave === 0 ? "0 - Commerciante" : numeroChiave} | ` +
       `Marca/Modello: ${`${marca} ${modello}`.trim()}`
 
-    await supabase.from("log_movimenti").insert({
+    const { error: logMovimentiError } = await supabase.from("log_movimenti").insert({
       targa,
       azione: "Ingresso",
       dettaglio,
@@ -215,6 +252,21 @@ export async function POST(req: NextRequest) {
       numero_chiave: numeroChiave,
       created_at: now,
     })
+
+    if (logMovimentiError) {
+      console.error("Errore log_movimenti ingresso:", logMovimentiError)
+
+      await writeAuditLog({
+        operatore,
+        azione: "INGRESSO_VEICOLO",
+        targa,
+        numero_chiave: numeroChiave,
+        zona_id: zonaId,
+        zona_attuale: ZONE_INFO[zonaId],
+        dettaglio: "Errore scrittura log_movimenti dopo inserimento vettura",
+        esito: "KO",
+      })
+    }
 
     await writeAuditLog({
       operatore,
@@ -231,7 +283,9 @@ export async function POST(req: NextRequest) {
       ok: true,
       message: "Vettura registrata correttamente",
     })
-  } catch {
+  } catch (error) {
+    console.error("Errore interno ingresso veicolo:", error)
+
     return NextResponse.json(
       { ok: false, error: "Errore interno ingresso" },
       { status: 500 }
