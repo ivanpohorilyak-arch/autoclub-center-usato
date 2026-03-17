@@ -14,7 +14,85 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.response
 
   try {
+    const supabase = getSupabase()
+
     const q = (req.nextUrl.searchParams.get("q") || "").trim().toUpperCase()
+    const suggest = req.nextUrl.searchParams.get("suggest") === "true"
+    const recent = req.nextUrl.searchParams.get("recent") === "true"
+
+    if (recent) {
+      const { data, error } = await supabase
+        .from("ricerca_log_operatore")
+        .select("id, query, targa, numero_chiave, marca_modello, colore, stato, created_at")
+        .eq("operatore", auth.user)
+        .order("created_at", { ascending: false })
+        .limit(30)
+
+      if (error) {
+        return NextResponse.json(
+          { ok: false, error: error.message },
+          { status: 500 }
+        )
+      }
+
+      const seen = new Set<string>()
+      const recenti = (data || [])
+        .filter((item) => {
+          const key =
+            item.targa ||
+            (item.numero_chiave != null ? `chiave-${item.numero_chiave}` : item.query)
+
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+        .slice(0, 10)
+
+      return NextResponse.json({
+        ok: true,
+        recenti,
+      })
+    }
+
+    if (suggest) {
+      if (!q) {
+        return NextResponse.json({
+          ok: true,
+          suggerimenti: [],
+        })
+      }
+
+      const isNumeroChiave = /^[0-9]+$/.test(q)
+
+      if (!isNumeroChiave && q.length < 2) {
+        return NextResponse.json({
+          ok: true,
+          suggerimenti: [],
+        })
+      }
+
+      let suggestQuery = supabase
+        .from("parco_usato")
+        .select("targa, marca_modello, colore, numero_chiave, zona_attuale, stato")
+        .eq("stato", "PRESENTE")
+        .limit(8)
+
+      const { data, error } = isNumeroChiave
+        ? await suggestQuery.eq("numero_chiave", Number(q))
+        : await suggestQuery.ilike("targa", `%${q}%`)
+
+      if (error) {
+        return NextResponse.json(
+          { ok: false, error: error.message },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({
+        ok: true,
+        suggerimenti: data || [],
+      })
+    }
 
     if (!q) {
       return NextResponse.json(
@@ -23,7 +101,6 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const supabase = getSupabase()
     const isNumeroChiave = /^[0-9]+$/.test(q)
 
     const query = supabase
@@ -78,6 +155,16 @@ export async function GET(req: NextRequest) {
         { status: 500 }
       )
     }
+
+    await supabase.from("ricerca_log_operatore").insert({
+      operatore: auth.user,
+      query: q,
+      targa: veicolo.targa,
+      numero_chiave: veicolo.numero_chiave ?? null,
+      marca_modello: veicolo.marca_modello ?? null,
+      colore: veicolo.colore ?? null,
+      stato: veicolo.stato ?? null,
+    })
 
     return NextResponse.json({
       ok: true,
