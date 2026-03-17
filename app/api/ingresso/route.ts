@@ -1,30 +1,17 @@
+import { requireServerAuth } from "@/lib/auth-guard"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { writeAuditLog } from "@/lib/audit-log"
-import { requireServerAuth } from "@/lib/auth-guard"
-
-const ZONE_INFO: Record<string, string> = {
-  Z01: "Deposito N.9",
-  Z02: "Deposito N.7",
-  Z03: "Deposito N.6 (Lavaggisti)",
-  Z04: "Deposito unificato 1 e 2",
-  Z05: "Showroom",
-  Z06: "Vetture vendute",
-  Z07: "Piazzale Lavaggio",
-  Z08: "Commercianti senza telo",
-  Z09: "Commercianti con telo",
-  Z10: "Lavorazioni esterni",
-  Z11: "Verso altre sedi",
-  Z12: "Deposito N.10",
-  Z13: "Deposito N.8",
-  Z14: "Esterno (Con o Senza telo Motorsclub)",
-}
 
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+}
+
+function isValidTarga(value: string) {
+  return /^[A-Z]{2}[0-9]{3}[A-Z]{2}$/.test(value)
 }
 
 export async function POST(req: NextRequest) {
@@ -34,21 +21,49 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
 
-    const targa = String(body.targa || "").trim().toUpperCase().replace(/\s+/g, "")
-    const marca = String(body.marca || "").trim().toUpperCase()
-    const modello = String(body.modello || "").trim().toUpperCase()
-    const colore = String(body.colore || "").trim()
-    const km = Number(body.km || 0)
-    const numeroChiave = Number(body.numeroChiave || 0)
-    const note = String(body.note || "").trim()
-    const zonaId = String(body.zonaId || "").trim().toUpperCase()
-    const operatore = auth.user
+    const targaOriginale = String(body?.targaOriginale || "")
+      .trim()
+      .toUpperCase()
 
-    if (!/^[A-Z]{2}[0-9]{3}[A-Z]{2}$/.test(targa)) {
+    const nuovaTarga = String(body?.targa || "")
+      .trim()
+      .toUpperCase()
+
+    const marca_modello = String(body?.marca_modello || "")
+      .trim()
+      .toUpperCase()
+
+    const colore = String(body?.colore || "")
+      .trim()
+
+    const km = body?.km === "" || body?.km == null ? null : Number(body.km)
+
+    const numero_chiave =
+      body?.numero_chiave === "" || body?.numero_chiave == null
+        ? null
+        : Number(body.numero_chiave)
+
+    const note = String(body?.note || "").trim()
+
+    if (!targaOriginale) {
+      return NextResponse.json(
+        { ok: false, error: "Targa originale mancante" },
+        { status: 400 }
+      )
+    }
+
+    if (!nuovaTarga) {
+      return NextResponse.json(
+        { ok: false, error: "Targa obbligatoria" },
+        { status: 400 }
+      )
+    }
+
+    if (!isValidTarga(nuovaTarga)) {
       await writeAuditLog({
-        operatore,
-        azione: "INGRESSO_VEICOLO",
-        targa,
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
         dettaglio: "Formato targa non valido",
         esito: "KO",
       })
@@ -59,27 +74,45 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (!zonaId || !ZONE_INFO[zonaId]) {
+    if (!marca_modello) {
       await writeAuditLog({
-        operatore,
-        azione: "INGRESSO_VEICOLO",
-        targa,
-        dettaglio: "Zona non valida",
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Marca / modello obbligatorio mancante",
         esito: "KO",
       })
 
       return NextResponse.json(
-        { ok: false, error: "Zona non valida" },
+        { ok: false, error: "Marca / modello obbligatorio" },
         { status: 400 }
       )
     }
 
-    if (!Number.isFinite(km) || !Number.isInteger(km) || km < 0 || km > 1000000) {
+    if (!colore) {
       await writeAuditLog({
-        operatore,
-        azione: "INGRESSO_VEICOLO",
-        targa,
-        dettaglio: `KM non validi: ${String(body.km ?? "")}`,
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Colore obbligatorio mancante",
+        esito: "KO",
+      })
+
+      return NextResponse.json(
+        { ok: false, error: "Colore obbligatorio" },
+        { status: 400 }
+      )
+    }
+
+    if (
+      km != null &&
+      (!Number.isInteger(km) || km < 0 || km > 1000000)
+    ) {
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "KM non validi",
         esito: "KO",
       })
 
@@ -90,16 +123,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (
-      !Number.isFinite(numeroChiave) ||
-      !Number.isInteger(numeroChiave) ||
-      numeroChiave < 0 ||
-      numeroChiave > 9999
+      numero_chiave != null &&
+      (!Number.isInteger(numero_chiave) || numero_chiave < 0 || numero_chiave > 9999)
     ) {
       await writeAuditLog({
-        operatore,
-        azione: "INGRESSO_VEICOLO",
-        targa,
-        dettaglio: `Numero chiave non valido: ${String(body.numeroChiave ?? "")}`,
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Numero chiave non valido",
         esito: "KO",
       })
 
@@ -111,183 +142,289 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabase()
 
-    const { data: targaEsistente, error: errTarga } = await supabase
-      .from("parco_usato")
-      .select("targa, stato")
-      .eq("targa", targa)
-      .limit(1)
+    const { data: utente, error: utenteError } = await supabase
+      .from("utenti")
+      .select("nome, can_modifica_targa")
+      .eq("nome", auth.user)
+      .maybeSingle()
 
-    if (errTarga) {
+    if (utenteError) {
       await writeAuditLog({
-        operatore,
-        azione: "INGRESSO_VEICOLO",
-        targa,
-        zona_id: zonaId,
-        zona_attuale: ZONE_INFO[zonaId],
-        dettaglio: "Errore controllo targa esistente",
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Errore lettura permessi utente",
         esito: "KO",
       })
 
       return NextResponse.json(
-        { ok: false, error: errTarga.message },
+        { ok: false, error: utenteError.message },
         { status: 500 }
       )
     }
 
-    if (targaEsistente && targaEsistente.length > 0) {
+    const canModificaTarga = Boolean(utente?.can_modifica_targa)
+
+    if (!canModificaTarga && nuovaTarga !== targaOriginale) {
       await writeAuditLog({
-        operatore,
-        azione: "INGRESSO_VEICOLO",
-        targa,
-        zona_id: zonaId,
-        zona_attuale: ZONE_INFO[zonaId],
-        dettaglio: `Targa già presente in archivio con stato ${targaEsistente[0].stato || "-"}`,
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Tentativo modifica targa senza autorizzazione",
         esito: "KO",
       })
 
       return NextResponse.json(
-        {
-          ok: false,
-          error: `La targa ${targa} è già presente in archivio.`,
-        },
-        { status: 400 }
+        { ok: false, error: "Non sei autorizzato a modificare la targa" },
+        { status: 403 }
       )
     }
 
-    if (numeroChiave > 0) {
-      const { data: chiaveEsistente, error: errChiave } = await supabase
+    const { data: veicoloAttuale, error: findError } = await supabase
+      .from("parco_usato")
+      .select("*")
+      .eq("targa", targaOriginale)
+      .eq("stato", "PRESENTE")
+      .maybeSingle()
+
+    if (findError) {
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Errore ricerca vettura",
+        esito: "KO",
+      })
+
+      return NextResponse.json(
+        { ok: false, error: findError.message },
+        { status: 500 }
+      )
+    }
+
+    if (!veicoloAttuale) {
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "Vettura non trovata o non presente",
+        esito: "KO",
+      })
+
+      return NextResponse.json(
+        { ok: false, error: "Vettura non trovata" },
+        { status: 404 }
+      )
+    }
+
+    if (nuovaTarga !== targaOriginale) {
+      const { data: targaDuplicata, error: targaDupError } = await supabase
         .from("parco_usato")
-        .select("targa")
-        .eq("numero_chiave", numeroChiave)
-        .eq("stato", "PRESENTE")
+        .select("targa, stato, zona_attuale, zona_id")
+        .eq("targa", nuovaTarga)
         .limit(1)
 
-      if (errChiave) {
+      if (targaDupError) {
         await writeAuditLog({
-          operatore,
-          azione: "INGRESSO_VEICOLO",
-          targa,
-          numero_chiave: numeroChiave,
-          zona_id: zonaId,
-          zona_attuale: ZONE_INFO[zonaId],
-          dettaglio: "Errore controllo chiave esistente",
+          operatore: auth.user,
+          azione: "MODIFICA_VEICOLO",
+          targa: targaOriginale,
+          dettaglio: "Errore controllo duplicato targa",
           esito: "KO",
         })
 
         return NextResponse.json(
-          { ok: false, error: errChiave.message },
+          { ok: false, error: targaDupError.message },
           { status: 500 }
         )
       }
 
-      if (chiaveEsistente && chiaveEsistente.length > 0) {
+      if (targaDuplicata && targaDuplicata.length > 0) {
+        const record = targaDuplicata[0]
+
+        const doveSiTrova =
+          record.stato === "PRESENTE"
+            ? `già presente in parco${
+                record.zona_attuale || record.zona_id
+                  ? ` in zona ${record.zona_attuale || record.zona_id}`
+                  : ""
+              }`
+            : record.stato === "CONSEGNATO"
+            ? "già presente tra le consegnate"
+            : `già presente in archivio con stato ${record.stato || "-"}`
+
         await writeAuditLog({
-          operatore,
-          azione: "INGRESSO_VEICOLO",
-          targa,
-          numero_chiave: numeroChiave,
-          zona_id: zonaId,
-          zona_attuale: ZONE_INFO[zonaId],
-          dettaglio: `Chiave ${numeroChiave} già occupata dalla vettura ${chiaveEsistente[0].targa}`,
+          operatore: auth.user,
+          azione: "MODIFICA_VEICOLO",
+          targa: targaOriginale,
+          dettaglio: `Tentativo modifica targa → ${nuovaTarga} (${doveSiTrova})`,
           esito: "KO",
         })
 
         return NextResponse.json(
           {
             ok: false,
-            error: `La chiave ${numeroChiave} è già occupata dalla vettura ${chiaveEsistente[0].targa}`,
+            error: `La targa ${nuovaTarga} è ${doveSiTrova}.`,
           },
-          { status: 400 }
+          { status: 409 }
         )
       }
     }
 
-    const payload = {
-      targa,
-      marca_modello: `${marca} ${modello}`.trim(),
-      colore,
-      km,
-      numero_chiave: numeroChiave,
-      zona_id: zonaId,
-      zona_attuale: ZONE_INFO[zonaId],
-      data_ingresso: new Date().toISOString(),
-      note,
-      stato: "PRESENTE",
-      utente_ultimo_invio: operatore,
+    if (
+      numero_chiave != null &&
+      numero_chiave > 0 &&
+      numero_chiave !== veicoloAttuale.numero_chiave
+    ) {
+      const { data: chiaveDuplicata, error: chiaveDupError } = await supabase
+        .from("parco_usato")
+        .select("targa")
+        .eq("numero_chiave", numero_chiave)
+        .eq("stato", "PRESENTE")
+        .limit(1)
+
+      if (chiaveDupError) {
+        await writeAuditLog({
+          operatore: auth.user,
+          azione: "MODIFICA_VEICOLO",
+          targa: targaOriginale,
+          numero_chiave,
+          dettaglio: "Errore controllo duplicato numero chiave",
+          esito: "KO",
+        })
+
+        return NextResponse.json(
+          { ok: false, error: chiaveDupError.message },
+          { status: 500 }
+        )
+      }
+
+      if (chiaveDuplicata && chiaveDuplicata.length > 0) {
+        await writeAuditLog({
+          operatore: auth.user,
+          azione: "MODIFICA_VEICOLO",
+          targa: targaOriginale,
+          numero_chiave,
+          dettaglio: `Numero chiave già assegnato a un'altra vettura: ${chiaveDuplicata[0].targa}`,
+          esito: "KO",
+        })
+
+        return NextResponse.json(
+          { ok: false, error: "Numero chiave già assegnato a un'altra vettura" },
+          { status: 409 }
+        )
+      }
     }
 
-    const { error: insertError } = await supabase.from("parco_usato").insert(payload)
+    const modifiche: string[] = []
 
-    if (insertError) {
-      console.error("Errore insert parco_usato:", insertError)
+    if ((veicoloAttuale.targa || "") !== nuovaTarga) {
+      modifiche.push(`Targa: ${veicoloAttuale.targa || "-"} → ${nuovaTarga}`)
+    }
 
+    if ((veicoloAttuale.marca_modello || "") !== marca_modello) {
+      modifiche.push(
+        `Marca/Modello: ${veicoloAttuale.marca_modello || "-"} → ${marca_modello}`
+      )
+    }
+
+    if ((veicoloAttuale.colore || "") !== colore) {
+      modifiche.push(`Colore: ${veicoloAttuale.colore || "-"} → ${colore}`)
+    }
+
+    if ((veicoloAttuale.km ?? null) !== (km ?? null)) {
+      modifiche.push(`KM: ${veicoloAttuale.km ?? "-"} → ${km ?? "-"}`)
+    }
+
+    if ((veicoloAttuale.numero_chiave ?? null) !== (numero_chiave ?? null)) {
+      modifiche.push(
+        `Chiave: ${veicoloAttuale.numero_chiave ?? "-"} → ${numero_chiave ?? "-"}`
+      )
+    }
+
+    if ((veicoloAttuale.note || "") !== note) {
+      modifiche.push("Note aggiornate")
+    }
+
+    const dettaglio =
+      modifiche.length > 0 ? modifiche.join(" | ") : "Nessuna modifica rilevata"
+
+    const updatePayload = {
+      targa: nuovaTarga,
+      marca_modello,
+      colore,
+      km,
+      numero_chiave,
+      note,
+      utente_ultimo_invio: auth.user,
+    }
+
+    const { error: updateError } = await supabase
+      .from("parco_usato")
+      .update(updatePayload)
+      .eq("targa", targaOriginale)
+      .eq("stato", "PRESENTE")
+
+    if (updateError) {
       await writeAuditLog({
-        operatore,
-        azione: "INGRESSO_VEICOLO",
-        targa,
-        numero_chiave: numeroChiave,
-        zona_id: zonaId,
-        zona_attuale: ZONE_INFO[zonaId],
-        dettaglio: "Errore inserimento vettura in parco_usato",
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        numero_chiave: numero_chiave ?? veicoloAttuale.numero_chiave ?? 0,
+        zona_id: veicoloAttuale.zona_id ?? null,
+        zona_attuale: veicoloAttuale.zona_attuale ?? null,
+        dettaglio: "Errore aggiornamento dati vettura",
         esito: "KO",
       })
 
       return NextResponse.json(
-        { ok: false, error: insertError.message },
+        { ok: false, error: updateError.message },
         { status: 500 }
       )
     }
 
     const now = new Date().toISOString()
-    const dettaglio =
-      `Ingresso in ${ZONE_INFO[zonaId]} | ` +
-      `Chiave: ${numeroChiave === 0 ? "0 - Commerciante" : numeroChiave} | ` +
-      `Marca/Modello: ${`${marca} ${modello}`.trim()}`
 
-    const { error: logMovimentiError } = await supabase.from("log_movimenti").insert({
-      targa,
-      azione: "Ingresso",
+    const { error: logError } = await supabase.from("log_movimenti").insert({
+      targa: nuovaTarga,
+      azione: "Modifica",
       dettaglio,
-      utente: operatore,
-      numero_chiave: numeroChiave,
+      utente: auth.user,
+      numero_chiave: numero_chiave ?? 0,
       created_at: now,
     })
 
-    if (logMovimentiError) {
-      console.error("Errore log_movimenti ingresso:", logMovimentiError)
-
-      await writeAuditLog({
-        operatore,
-        azione: "INGRESSO_VEICOLO",
-        targa,
-        numero_chiave: numeroChiave,
-        zona_id: zonaId,
-        zona_attuale: ZONE_INFO[zonaId],
-        dettaglio: "Errore scrittura log_movimenti dopo inserimento vettura",
-        esito: "KO",
-      })
+    if (logError) {
+      console.error("Errore log_movimenti:", logError)
     }
 
     await writeAuditLog({
-      operatore,
-      azione: "INGRESSO_VEICOLO",
-      targa,
-      numero_chiave: numeroChiave,
-      zona_id: zonaId,
-      zona_attuale: ZONE_INFO[zonaId],
+      operatore: auth.user,
+      azione: "MODIFICA_VEICOLO",
+      targa: nuovaTarga,
+      numero_chiave: numero_chiave ?? 0,
+      zona_id: veicoloAttuale.zona_id ?? null,
+      zona_attuale: veicoloAttuale.zona_attuale ?? null,
       dettaglio,
       esito: "OK",
     })
 
     return NextResponse.json({
       ok: true,
-      message: "Vettura registrata correttamente",
+      message: "Dati aggiornati correttamente",
     })
   } catch (error) {
-    console.error("Errore interno ingresso veicolo:", error)
+    console.error("Errore interno modifica veicolo:", error)
+
+    await writeAuditLog({
+      operatore: auth.user || "Sconosciuto",
+      azione: "MODIFICA_VEICOLO",
+      dettaglio: "Errore interno modifica",
+      esito: "KO",
+    })
 
     return NextResponse.json(
-      { ok: false, error: "Errore interno ingresso" },
+      { ok: false, error: "Errore interno modifica" },
       { status: 500 }
     )
   }
