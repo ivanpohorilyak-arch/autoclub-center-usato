@@ -104,7 +104,28 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (numero_chiave != null && (Number.isNaN(numero_chiave) || numero_chiave < 0)) {
+    if (
+      km != null &&
+      (!Number.isInteger(km) || km < 0 || km > 1000000)
+    ) {
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "MODIFICA_VEICOLO",
+        targa: targaOriginale,
+        dettaglio: "KM non validi",
+        esito: "KO",
+      })
+
+      return NextResponse.json(
+        { ok: false, error: "KM non validi" },
+        { status: 400 }
+      )
+    }
+
+    if (
+      numero_chiave != null &&
+      (!Number.isInteger(numero_chiave) || numero_chiave < 0 || numero_chiave > 9999)
+    ) {
       await writeAuditLog({
         operatore: auth.user,
         azione: "MODIFICA_VEICOLO",
@@ -199,9 +220,8 @@ export async function POST(req: NextRequest) {
     if (nuovaTarga !== targaOriginale) {
       const { data: targaDuplicata, error: targaDupError } = await supabase
         .from("parco_usato")
-        .select("targa")
+        .select("targa, stato, zona_attuale, zona_id")
         .eq("targa", nuovaTarga)
-        .eq("stato", "PRESENTE")
         .limit(1)
 
       if (targaDupError) {
@@ -220,16 +240,32 @@ export async function POST(req: NextRequest) {
       }
 
       if (targaDuplicata && targaDuplicata.length > 0) {
+        const record = targaDuplicata[0]
+
+        const doveSiTrova =
+          record.stato === "PRESENTE"
+            ? `già presente in parco${
+                record.zona_attuale || record.zona_id
+                  ? ` in zona ${record.zona_attuale || record.zona_id}`
+                  : ""
+              }`
+            : record.stato === "CONSEGNATO"
+            ? "già presente tra le consegnate"
+            : `già presente in archivio con stato ${record.stato || "-"}`
+
         await writeAuditLog({
           operatore: auth.user,
           azione: "MODIFICA_VEICOLO",
           targa: targaOriginale,
-          dettaglio: `Targa già presente nel piazzale: ${nuovaTarga}`,
+          dettaglio: `Tentativo modifica targa → ${nuovaTarga} (${doveSiTrova})`,
           esito: "KO",
         })
 
         return NextResponse.json(
-          { ok: false, error: "Targa già presente nel piazzale" },
+          {
+            ok: false,
+            error: `La targa ${nuovaTarga} è ${doveSiTrova}.`,
+          },
           { status: 409 }
         )
       }
@@ -349,7 +385,7 @@ export async function POST(req: NextRequest) {
 
     const now = new Date().toISOString()
 
-    await supabase.from("log_movimenti").insert({
+    const { error: logError } = await supabase.from("log_movimenti").insert({
       targa: nuovaTarga,
       azione: "Modifica",
       dettaglio,
@@ -357,6 +393,10 @@ export async function POST(req: NextRequest) {
       numero_chiave: numero_chiave ?? 0,
       created_at: now,
     })
+
+    if (logError) {
+      console.error("Errore log_movimenti:", logError)
+    }
 
     await writeAuditLog({
       operatore: auth.user,
@@ -373,9 +413,11 @@ export async function POST(req: NextRequest) {
       ok: true,
       message: "Dati aggiornati correttamente",
     })
-  } catch {
+  } catch (error) {
+    console.error("Errore interno modifica veicolo:", error)
+
     await writeAuditLog({
-      operatore: "Sconosciuto",
+      operatore: auth.user || "Sconosciuto",
       azione: "MODIFICA_VEICOLO",
       dettaglio: "Errore interno modifica",
       esito: "KO",
