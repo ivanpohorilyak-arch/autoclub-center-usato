@@ -90,8 +90,37 @@ export function LoginForm() {
   }, [operatoriFiltrati, filtroOperatore])
 
   useEffect(() => {
-    const t = setTimeout(() => setShowCredit(true), 3000)
-    return () => clearTimeout(t)
+    let timeoutId: ReturnType<typeof setTimeout>
+
+    const scheduleShow = () => {
+      clearTimeout(timeoutId)
+      setShowCredit(false)
+
+      timeoutId = setTimeout(() => {
+        setShowCredit(true)
+      }, 4000)
+    }
+
+    const handleActivity = () => {
+      scheduleShow()
+    }
+
+    scheduleShow()
+
+    window.addEventListener("mousemove", handleActivity)
+    window.addEventListener("mousedown", handleActivity)
+    window.addEventListener("keydown", handleActivity)
+    window.addEventListener("touchstart", handleActivity)
+    window.addEventListener("scroll", handleActivity, { passive: true })
+
+    return () => {
+      clearTimeout(timeoutId)
+      window.removeEventListener("mousemove", handleActivity)
+      window.removeEventListener("mousedown", handleActivity)
+      window.removeEventListener("keydown", handleActivity)
+      window.removeEventListener("touchstart", handleActivity)
+      window.removeEventListener("scroll", handleActivity)
+    }
   }, [])
 
   async function handleSubmit(customPin?: string) {
@@ -294,8 +323,8 @@ export function LoginForm() {
             showCredit ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
           }`}
         >
-          <div className="rounded-xl bg-gradient-to-r from-slate-100/70 to-slate-200/50 px-3 py-1.5 text-[11px] text-slate-500 shadow-sm backdrop-blur-sm">
-            Autoclub Center 2.1 · by Ivan · supported by AI &amp; SL
+          <div className="rounded-xl bg-gradient-to-r from-slate-100/80 to-slate-200/60 px-3 py-1.5 text-[11px] text-slate-500 shadow-sm backdrop-blur-sm">
+            Autoclub Center 2.1 · Creato da Ivan · con supporto ChatGPT &amp; SL
           </div>
         </div>
       </div>
