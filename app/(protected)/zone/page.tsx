@@ -19,20 +19,20 @@ export default async function ZonePage() {
 
   const supabase = getSupabase()
 
-  const { data: profilo, error } = await supabase
-    .from("profili")
+  const { data: utente, error } = await supabase
+    .from("utenti")
     .select("ruolo, attivo")
-    .eq("id", auth.user)
+    .eq("nome", auth.user)
     .maybeSingle()
 
   const isAdmin =
     !error &&
-    profilo &&
-    profilo.attivo &&
-    String(profilo.ruolo || "").toLowerCase() === "admin"
+    utente &&
+    utente.attivo &&
+    String(utente.ruolo || "").trim().toLowerCase() === "admin"
 
   if (!isAdmin) {
-    redirect("/dashboard")
+    redirect("/home")
   }
 
   return <GestioneZonePage />
