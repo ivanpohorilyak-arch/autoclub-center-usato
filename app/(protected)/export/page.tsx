@@ -1,30 +1,61 @@
 "use client"
 
 import { Topbar } from "../../../components/layout/topbar"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
-const ZONE_INFO: Record<string, string> = {
-  Z01: "Deposito N.9",
-  Z02: "Deposito N.7",
-  Z03: "Deposito N.6 (Lavaggisti)",
-  Z04: "Deposito unificato 1 e 2",
-  Z05: "Showroom",
-  Z06: "Vetture vendute",
-  Z07: "Piazzale Lavaggio",
-  Z08: "Commercianti senza telo",
-  Z09: "Commercianti con telo",
-  Z10: "Lavorazioni esterni",
-  Z11: "Verso altre sedi",
-  Z12: "Deposito N.10",
-  Z13: "Deposito N.8",
-  Z14: "Esterno (Con o Senza telo Motorsclub)",
+type Zona = {
+  id: string
+  nome: string
 }
 
 export default function ExportPage() {
+  const [zone, setZone] = useState<Zona[]>([])
+  const [zoneLoading, setZoneLoading] = useState(true)
+
   const [zonaId, setZonaId] = useState("TUTTE")
   const [periodoLog, setPeriodoLog] = useState("ultimi_7_giorni")
   const [periodoAudit, setPeriodoAudit] = useState("ultimi_7_giorni")
   const [loading, setLoading] = useState("")
+
+  useEffect(() => {
+    let active = true
+
+    async function loadZone() {
+      try {
+        setZoneLoading(true)
+
+        const res = await fetch("/api/zone", {
+          method: "GET",
+          cache: "no-store",
+        })
+
+        const data = await res.json()
+
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || "Errore caricamento zone")
+        }
+
+        if (!active) return
+
+        setZone(Array.isArray(data.zone) ? data.zone : [])
+      } catch (err) {
+        console.error("LOAD ZONE ERROR:", err)
+        if (active) {
+          setZone([])
+        }
+      } finally {
+        if (active) {
+          setZoneLoading(false)
+        }
+      }
+    }
+
+    void loadZone()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   function scarica(url: string) {
     const a = document.createElement("a")
@@ -79,12 +110,13 @@ export default function ExportPage() {
             <select
               value={zonaId}
               onChange={(e) => setZonaId(e.target.value)}
-              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base outline-none focus:border-cyan-500"
+              disabled={zoneLoading}
+              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base outline-none focus:border-cyan-500 disabled:opacity-60"
             >
               <option value="TUTTE">Tutte le zone</option>
-              {Object.entries(ZONE_INFO).map(([id, nome]) => (
-                <option key={id} value={id}>
-                  {id} - {nome}
+              {zone.map((z) => (
+                <option key={z.id} value={z.id}>
+                  {z.id} - {z.nome}
                 </option>
               ))}
             </select>
@@ -94,7 +126,8 @@ export default function ExportPage() {
             <button
               type="button"
               onClick={exportParcoUsato}
-              className="w-full rounded-2xl bg-cyan-600 px-5 py-3 text-sm font-semibold text-white hover:bg-cyan-700"
+              disabled={zoneLoading}
+              className="w-full rounded-2xl bg-cyan-600 px-5 py-3 text-sm font-semibold text-white hover:bg-cyan-700 disabled:opacity-60"
             >
               {loading === "parco" ? "Preparazione..." : "Export CSV Parco Usato"}
             </button>
