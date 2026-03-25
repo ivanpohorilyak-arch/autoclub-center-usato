@@ -73,8 +73,15 @@ export default function GestioneUtentiPage() {
       const meData = await meRes.json()
       const usersData = await usersRes.json()
 
-      if (meData?.ok && meData?.user) {
-        setMe(meData.user)
+      if (meData?.ok) {
+        setMe({
+          id: meData.id,
+          nome: meData.nome,
+          ruolo: meData.ruolo,
+          attivo: meData.attivo,
+          can_consegna: meData.can_consegna,
+          can_modifica_targa: meData.can_modifica_targa,
+        })
       } else {
         setMe(null)
       }
