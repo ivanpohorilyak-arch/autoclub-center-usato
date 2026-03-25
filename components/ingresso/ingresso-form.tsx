@@ -3,24 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Html5Qrcode } from "html5-qrcode"
 
-const ZONE_INFO = {
-  Z01: "Deposito N.9",
-  Z02: "Deposito N.7",
-  Z03: "Deposito N.6 (Lavaggisti)",
-  Z04: "Deposito unificato 1 e 2",
-  Z05: "Showroom",
-  Z06: "Vetture vendute",
-  Z07: "Piazzale Lavaggio",
-  Z08: "Commercianti senza telo",
-  Z09: "Commercianti con telo",
-  Z10: "Lavorazioni esterni",
-  Z11: "Verso altre sedi",
-  Z12: "Deposito N.10",
-  Z13: "Deposito N.8",
-  Z14: "Esterno (Con o Senza telo Motorsclub)",
-} as const
-
-type ZoneId = keyof typeof ZONE_INFO
+type Zona = {
+  id: string
+  nome: string
+}
 
 type SavedVehicle = {
   targa: string
@@ -60,6 +46,9 @@ export function IngressoForm() {
     "Premi “Attiva scanner zona” per leggere il QR."
   )
 
+  const [zone, setZone] = useState<Zona[]>([])
+  const [zoneLoading, setZoneLoading] = useState(true)
+
   const [targa, setTarga] = useState("")
   const [marca, setMarca] = useState("")
   const [modello, setModello] = useState("")
@@ -67,13 +56,14 @@ export function IngressoForm() {
   const [km, setKm] = useState("")
   const [numeroChiave, setNumeroChiave] = useState("0")
   const [note, setNote] = useState("")
-  const [zonaId, setZonaId] = useState<ZoneId | "">("")
+  const [zonaId, setZonaId] = useState("")
   const [feedback, setFeedback] = useState("")
   const [salvataggioInCorso, setSalvataggioInCorso] = useState(false)
   const [savedVehicle, setSavedVehicle] = useState<SavedVehicle | null>(null)
   const [showScrollTop, setShowScrollTop] = useState(false)
 
-  const zonaNome = zonaId ? ZONE_INFO[zonaId] : ""
+  const zonaSelezionata = zone.find((z) => z.id === zonaId)
+  const zonaNome = zonaSelezionata?.nome || ""
 
   async function stopZonaScanner() {
     try {
@@ -115,15 +105,16 @@ export function IngressoForm() {
             return
           }
 
-          const code = value.replace("ZONA|", "").trim() as ZoneId
+          const code = value.replace("ZONA|", "").trim()
+          const zonaValida = zone.find((z) => z.id === code)
 
-          if (!ZONE_INFO[code]) {
+          if (!zonaValida) {
             setScannerZonaMsg("Zona non riconosciuta.")
             return
           }
 
-          setZonaId(code)
-          setFeedback(`Zona rilevata: ${code} · ${ZONE_INFO[code]}`)
+          setZonaId(zonaValida.id)
+          setFeedback(`Zona rilevata: ${zonaValida.id} · ${zonaValida.nome}`)
           setScannerZonaMsg("Zona letta correttamente.")
 
           if (navigator.vibrate) {
@@ -150,7 +141,54 @@ export function IngressoForm() {
   }
 
   useEffect(() => {
+    let active = true
+
+    async function loadZone() {
+      try {
+        setZoneLoading(true)
+
+        const res = await fetch("/api/zone", {
+          method: "GET",
+          cache: "no-store",
+        })
+
+        const data = await res.json()
+
+        if (!res.ok) {
+          throw new Error(data?.error || "Errore caricamento zone")
+        }
+
+        if (active) {
+          setZone(Array.isArray(data.zone) ? data.zone : [])
+        }
+      } catch (err) {
+        console.error("LOAD ZONE ERROR:", err)
+        if (active) {
+          setZone([])
+          setFeedback("Errore caricamento zone.")
+        }
+      } finally {
+        if (active) {
+          setZoneLoading(false)
+        }
+      }
+    }
+
+    void loadZone()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
     if (scannerZonaAttivo) {
+      if (zoneLoading) {
+        setScannerZonaMsg("Attendere caricamento zone prima di avviare lo scanner.")
+        setScannerZonaAttivo(false)
+        return
+      }
+
       void startZonaScanner()
     } else {
       void stopZonaScanner()
@@ -159,7 +197,7 @@ export function IngressoForm() {
     return () => {
       void stopZonaScanner()
     }
-  }, [scannerZonaAttivo])
+  }, [scannerZonaAttivo, zoneLoading, zone])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -281,7 +319,7 @@ export function IngressoForm() {
         numeroChiave: chiaveNumero,
         note: note.trim(),
         zonaId,
-        zonaNome: ZONE_INFO[zonaId],
+        zonaNome,
       })
 
       setFeedback("Vettura registrata correttamente.")
@@ -363,7 +401,8 @@ export function IngressoForm() {
             <button
               type="button"
               onClick={() => setScannerZonaAttivo(true)}
-              className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+              disabled={zoneLoading || zone.length === 0}
+              className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
             >
               Attiva scanner zona
             </button>
@@ -386,10 +425,10 @@ export function IngressoForm() {
         </div>
 
         <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          {scannerZonaMsg}
+          {zoneLoading ? "Caricamento zone..." : scannerZonaMsg}
         </div>
 
-        {!zonaId && (
+        {!zonaId && !zoneLoading && (
           <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             Scansione QR zona obbligatoria per abilitare il salvataggio.
           </div>
@@ -605,7 +644,7 @@ export function IngressoForm() {
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 type="submit"
-                disabled={salvataggioInCorso || !zonaId}
+                disabled={salvataggioInCorso || !zonaId || zoneLoading}
                 className="rounded-2xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
               >
                 {salvataggioInCorso ? "Salvataggio..." : "Salva ingresso"}
