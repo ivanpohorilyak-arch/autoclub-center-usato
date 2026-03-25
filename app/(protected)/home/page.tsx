@@ -45,7 +45,7 @@ export default function HomePage() {
       }
     }
 
-    loadMe()
+    void loadMe()
   }, [])
 
   const isAdmin = (user?.ruolo || "").toLowerCase() === "admin"
