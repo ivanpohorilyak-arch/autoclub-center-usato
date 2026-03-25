@@ -319,13 +319,13 @@ export function LoginForm() {
         )}
 
         <div
-          className={`mt-3 flex justify-center transition-all duration-700 ${
-            showCredit ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
+          className={`mt-4 text-center transition-all duration-500 ${
+            showCredit ? "opacity-100" : "opacity-0"
           }`}
         >
-          <div className="rounded-xl bg-gradient-to-r from-slate-100/80 to-slate-200/60 px-3 py-1.5 text-[11px] text-slate-500 shadow-sm backdrop-blur-sm">
+          <p className="text-[12px] text-slate-400">
             Autoclub Center 2.1 · Creato da Ivan · con supporto ChatGPT &amp; SL
-          </div>
+          </p>
         </div>
       </div>
     </div>
