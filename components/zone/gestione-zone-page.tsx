@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { Topbar } from "../layout/topbar"
 
 type Zona = {
   id: string
@@ -15,9 +16,27 @@ export function GestioneZonePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [feedback, setFeedback] = useState("")
+  const [showScrollTop, setShowScrollTop] = useState(false)
 
   const [newId, setNewId] = useState("")
   const [newNome, setNewNome] = useState("")
+
+  useEffect(() => {
+    void caricaZone()
+  }, [])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300)
+    }
+
+    handleScroll()
+    window.addEventListener("scroll", handleScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+    }
+  }, [])
 
   async function caricaZone() {
     try {
@@ -42,10 +61,6 @@ export function GestioneZonePage() {
       setLoading(false)
     }
   }
-
-  useEffect(() => {
-    void caricaZone()
-  }, [])
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -156,41 +171,60 @@ export function GestioneZonePage() {
     }
   }
 
+  function scrollTop() {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    })
+  }
+
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Gestione zone</h1>
+    <div className="mx-auto max-w-7xl p-4 sm:p-6">
+      <Topbar />
+
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-slate-900">Gestione zone</h1>
         <p className="mt-1 text-sm text-slate-500">
           Aggiungi zone, attiva o disattiva, cambia ordine senza toccare GitHub.
         </p>
       </div>
 
+      {feedback && (
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          {feedback}
+        </div>
+      )}
+
       <form
         onSubmit={handleCreate}
-        className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+        className="mb-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
       >
-        <h2 className="mb-4 text-lg font-bold text-slate-900">Nuova zona</h2>
+        <h2 className="mb-4 text-xl font-bold text-slate-900">Nuova zona</h2>
 
-        <div className="grid gap-4 md:grid-cols-[180px_1fr_auto]">
+        <div className="grid gap-3 lg:grid-cols-[160px_1fr_auto]">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Codice</label>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Codice
+            </label>
             <input
               type="text"
               value={newId}
               onChange={(e) => setNewId(e.target.value.toUpperCase())}
               placeholder="Z15"
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500"
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base outline-none focus:border-indigo-500"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Nome zona</label>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Nome zona
+            </label>
             <input
               type="text"
               value={newNome}
               onChange={(e) => setNewNome(e.target.value)}
               placeholder="Nuova zona"
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500"
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base outline-none focus:border-indigo-500"
             />
           </div>
 
@@ -198,7 +232,7 @@ export function GestioneZonePage() {
             <button
               type="submit"
               disabled={saving}
-              className="w-full rounded-2xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              className="rounded-2xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
             >
               {saving ? "Salvataggio..." : "Aggiungi"}
             </button>
@@ -207,31 +241,25 @@ export function GestioneZonePage() {
       </form>
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-slate-900">Elenco zone</h2>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-xl font-bold text-slate-900">Elenco zone</h2>
 
           <button
             type="button"
             onClick={() => void caricaZone()}
             disabled={loading || saving}
-            className="rounded-2xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300 disabled:opacity-60"
+            className="rounded-2xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-60"
           >
             Aggiorna
           </button>
         </div>
 
-        {feedback && (
-          <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            {feedback}
-          </div>
-        )}
-
         {loading ? (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-slate-500">
             Caricamento zone...
           </div>
         ) : zone.length === 0 ? (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-slate-500">
             Nessuna zona trovata.
           </div>
         ) : (
@@ -239,13 +267,13 @@ export function GestioneZonePage() {
             {zone.map((z, index) => (
               <div
                 key={z.id}
-                className="flex flex-col gap-4 rounded-2xl border border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between"
+                className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">
+                  <div className="text-lg font-bold text-slate-900">
                     {z.id} - {z.nome}
                   </div>
-                  <div className="mt-1 text-xs text-slate-500">
+                  <div className="mt-1 text-sm text-slate-500">
                     Ordine: {z.ordine} · Stato: {z.attiva ? "Attiva" : "Disattivata"}
                   </div>
                 </div>
@@ -255,7 +283,7 @@ export function GestioneZonePage() {
                     type="button"
                     disabled={saving || index === 0}
                     onClick={() => void moveZona(z.id, "up")}
-                    className="rounded-2xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300 disabled:opacity-60"
+                    className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-60"
                   >
                     Su
                   </button>
@@ -264,7 +292,7 @@ export function GestioneZonePage() {
                     type="button"
                     disabled={saving || index === zone.length - 1}
                     onClick={() => void moveZona(z.id, "down")}
-                    className="rounded-2xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300 disabled:opacity-60"
+                    className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-60"
                   >
                     Giù
                   </button>
@@ -275,7 +303,7 @@ export function GestioneZonePage() {
                     onClick={() => void toggleZona(z.id, z.attiva)}
                     className={`rounded-2xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 ${
                       z.attiva
-                        ? "bg-rose-600 hover:bg-rose-700"
+                        ? "bg-pink-500 hover:bg-pink-600"
                         : "bg-emerald-600 hover:bg-emerald-700"
                     }`}
                   >
@@ -287,6 +315,17 @@ export function GestioneZonePage() {
           </div>
         )}
       </div>
+
+      {showScrollTop && (
+        <button
+          onClick={scrollTop}
+          aria-label="Torna su"
+          className="fixed right-5 bottom-24 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-violet-600 text-white shadow-xl transition-all duration-200 hover:bg-violet-700 active:scale-95 md:bottom-5 md:h-12 md:w-auto md:min-w-[124px] md:rounded-2xl md:px-4"
+        >
+          <span className="text-xl md:hidden">↑</span>
+          <span className="hidden text-sm font-semibold md:inline">Torna su</span>
+        </button>
+      )}
     </div>
   )
 }
