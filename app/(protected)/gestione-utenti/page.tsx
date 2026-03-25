@@ -43,7 +43,7 @@ export default function GestioneUtentiPage() {
   const [showScrollTop, setShowScrollTop] = useState(false)
 
   useEffect(() => {
-    loadAll()
+    void loadAll()
   }, [])
 
   useEffect(() => {
@@ -62,7 +62,6 @@ export default function GestioneUtentiPage() {
   async function loadAll() {
     setLoading(true)
     setError("")
-    setMessage("")
 
     try {
       const [meRes, usersRes] = await Promise.all([
@@ -127,9 +126,9 @@ export default function GestioneUtentiPage() {
         return
       }
 
-      setMessage("Utente creato correttamente.")
       setForm(EMPTY_FORM)
       await loadAll()
+      setMessage("Utente creato correttamente.")
     } catch {
       setError("Errore di connessione in creazione.")
     } finally {
@@ -168,9 +167,9 @@ export default function GestioneUtentiPage() {
         return
       }
 
-      setMessage("Utente aggiornato correttamente.")
       setEditPin("")
       await loadAll()
+      setMessage("Utente aggiornato correttamente.")
     } catch {
       setError("Errore di connessione in modifica.")
     } finally {
@@ -205,10 +204,10 @@ export default function GestioneUtentiPage() {
         return
       }
 
-      setMessage("Utente eliminato correttamente.")
       setSelectedId(null)
       setEditPin("")
       await loadAll()
+      setMessage("Utente eliminato correttamente.")
     } catch {
       setError("Errore di connessione in eliminazione.")
     } finally {
@@ -238,7 +237,7 @@ export default function GestioneUtentiPage() {
       <Topbar />
 
       {loading ? (
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm text-slate-500">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 text-slate-500 shadow-sm">
           Caricamento...
         </div>
       ) : !isAdmin ? (
@@ -403,9 +402,7 @@ export default function GestioneUtentiPage() {
                       <input
                         type="checkbox"
                         checked={selectedUser.attivo}
-                        onChange={(e) =>
-                          updateSelected("attivo", e.target.checked)
-                        }
+                        onChange={(e) => updateSelected("attivo", e.target.checked)}
                       />
                       Utente attivo
                     </label>
@@ -426,10 +423,7 @@ export default function GestioneUtentiPage() {
                         type="checkbox"
                         checked={selectedUser.can_modifica_targa}
                         onChange={(e) =>
-                          updateSelected(
-                            "can_modifica_targa",
-                            e.target.checked
-                          )
+                          updateSelected("can_modifica_targa", e.target.checked)
                         }
                       />
                       Abilitato modifica targa
@@ -477,16 +471,10 @@ export default function GestioneUtentiPage() {
                 <tbody>
                   {users.map((u) => (
                     <tr key={u.id} className="border-t border-slate-100">
-                      <td className="px-3 py-3 font-medium text-slate-900">
-                        {u.nome}
-                      </td>
+                      <td className="px-3 py-3 font-medium text-slate-900">{u.nome}</td>
                       <td className="px-3 py-3">{u.ruolo}</td>
-                      <td className="px-3 py-3">
-                        {u.attivo ? "Sì" : "No"}
-                      </td>
-                      <td className="px-3 py-3">
-                        {u.can_consegna ? "Sì" : "No"}
-                      </td>
+                      <td className="px-3 py-3">{u.attivo ? "Sì" : "No"}</td>
+                      <td className="px-3 py-3">{u.can_consegna ? "Sì" : "No"}</td>
                       <td className="px-3 py-3">
                         {u.can_modifica_targa ? "Sì" : "No"}
                       </td>
