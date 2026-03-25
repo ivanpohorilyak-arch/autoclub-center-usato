@@ -22,7 +22,7 @@ export default async function ZonePage() {
   const { data: utente, error } = await supabase
     .from("utenti")
     .select("ruolo, attivo")
-    .eq("nome", auth.user)
+    .ilike("nome", `%${auth.user}%`)
     .maybeSingle()
 
   const isAdmin =
