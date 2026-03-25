@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
 import { BrandLogo } from "./brand-logo"
 import { SessionTimeout } from "./session-timeout"
 
@@ -11,23 +10,6 @@ export function Topbar() {
   const pathname = usePathname()
 
   const isHome = pathname === "/home"
-  const [isAdmin, setIsAdmin] = useState(false)
-
-  useEffect(() => {
-    async function checkAdmin() {
-      try {
-        const res = await fetch("/api/me", { cache: "no-store" })
-        const data = await res.json()
-
-        const ruolo = String(data?.ruolo || "").trim().toLowerCase()
-        setIsAdmin(res.ok && data?.ok && ruolo === "admin")
-      } catch {
-        setIsAdmin(false)
-      }
-    }
-
-    void checkAdmin()
-  }, [])
 
   async function handleLogout() {
     try {
@@ -67,15 +49,6 @@ export function Topbar() {
               <div className="rounded-2xl bg-slate-100 px-4 py-2.5 text-center text-sm font-semibold text-slate-400">
                 Home
               </div>
-            )}
-
-            {isAdmin && (
-              <Link
-                href="/zone"
-                className="rounded-2xl bg-indigo-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-indigo-700"
-              >
-                Zone
-              </Link>
             )}
 
             <button
