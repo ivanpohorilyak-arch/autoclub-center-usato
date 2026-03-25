@@ -290,11 +290,13 @@ export function LoginForm() {
         )}
 
         <div
-          className={`pt-2 text-center text-[10px] text-slate-300 transition-all duration-700 ${
-            showCredit ? "opacity-70" : "opacity-0"
+          className={`mt-3 flex justify-center transition-all duration-700 ${
+            showCredit ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
           }`}
         >
-          Autoclub Center 2.1 · by Ivan · supported by ChatGPT &amp; SL
+          <div className="rounded-xl bg-gradient-to-r from-slate-100/70 to-slate-200/50 px-3 py-1.5 text-[11px] text-slate-500 shadow-sm backdrop-blur-sm">
+            Autoclub Center 2.1 · by Ivan · supported by ChatGPT &amp; SL
+          </div>
         </div>
       </div>
     </div>
