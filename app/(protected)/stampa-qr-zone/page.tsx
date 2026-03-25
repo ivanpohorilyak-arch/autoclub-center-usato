@@ -1,24 +1,12 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Topbar } from "../../../components/layout/topbar"
 import QRCode from "qrcode"
 
-const ZONE_INFO: Record<string, string> = {
-  Z01: "Deposito N.9",
-  Z02: "Deposito N.7",
-  Z03: "Deposito N.6 (Lavaggisti)",
-  Z04: "Deposito unificato 1 e 2",
-  Z05: "Showroom",
-  Z06: "Vetture vendute",
-  Z07: "Piazzale Lavaggio",
-  Z08: "Commercianti senza telo",
-  Z09: "Commercianti con telo",
-  Z10: "Lavorazioni esterni",
-  Z11: "Verso altre sedi",
-  Z12: "Deposito N.10",
-  Z13: "Deposito N.8",
-  Z14: "Esterno (Con o Senza telo Motorsclub)",
+type Zona = {
+  id: string
+  nome: string
 }
 
 type QrItem = {
@@ -36,18 +24,84 @@ async function buildQrDataUrl(value: string) {
 }
 
 export default function StampaQrZonePage() {
-  const zoneEntries = useMemo(() => Object.entries(ZONE_INFO), [])
-  const [selectedZonaId, setSelectedZonaId] = useState("Z01")
+  const [zone, setZone] = useState<Zona[]>([])
+  const [zoneLoading, setZoneLoading] = useState(true)
+  const [selectedZonaId, setSelectedZonaId] = useState("")
   const [singleQrUrl, setSingleQrUrl] = useState("")
   const [loadingSingle, setLoadingSingle] = useState(false)
   const [loadingAll, setLoadingAll] = useState(false)
   const [allQrs, setAllQrs] = useState<QrItem[]>([])
   const [error, setError] = useState("")
 
+  const zoneMap = useMemo(() => {
+    return new Map(zone.map((z) => [z.id, z.nome]))
+  }, [zone])
+
+  useEffect(() => {
+    let active = true
+
+    async function loadZone() {
+      try {
+        setZoneLoading(true)
+        setError("")
+
+        const res = await fetch("/api/zone", {
+          method: "GET",
+          cache: "no-store",
+        })
+
+        const data = await res.json()
+
+        if (!res.ok || !data.ok) {
+          throw new Error(data?.error || "Errore caricamento zone")
+        }
+
+        const rows: Zona[] = Array.isArray(data.zone) ? data.zone : []
+
+        if (!active) return
+
+        setZone(rows)
+
+        if (rows.length > 0) {
+          setSelectedZonaId((prev) => {
+            if (prev && rows.some((z) => z.id === prev)) return prev
+            return rows[0].id
+          })
+        } else {
+          setSelectedZonaId("")
+        }
+      } catch (err) {
+        console.error("LOAD ZONE ERROR:", err)
+        if (active) {
+          setZone([])
+          setSelectedZonaId("")
+          setError("Errore caricamento zone.")
+        }
+      } finally {
+        if (active) {
+          setZoneLoading(false)
+        }
+      }
+    }
+
+    void loadZone()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
   async function generaQrSingolo(zonaId: string) {
     try {
       setLoadingSingle(true)
       setError("")
+
+      const zonaNome = zoneMap.get(zonaId)
+      if (!zonaNome) {
+        setError("Zona non valida.")
+        return
+      }
+
       const value = `ZONA|${zonaId}`
       const dataUrl = await buildQrDataUrl(value)
       setSingleQrUrl(dataUrl)
@@ -64,13 +118,13 @@ export default function StampaQrZonePage() {
       setError("")
 
       const results = await Promise.all(
-        zoneEntries.map(async ([zonaId, zonaNome]) => {
-          const value = `ZONA|${zonaId}`
+        zone.map(async ({ id, nome }) => {
+          const value = `ZONA|${id}`
           const dataUrl = await buildQrDataUrl(value)
 
           return {
-            zonaId,
-            zonaNome,
+            zonaId: id,
+            zonaNome: nome,
             value,
             dataUrl,
           }
@@ -93,9 +147,9 @@ export default function StampaQrZonePage() {
   }
 
   function stampaSingolo() {
-    if (!singleQrUrl) return
+    if (!singleQrUrl || !selectedZonaId) return
 
-    const zonaNome = ZONE_INFO[selectedZonaId]
+    const zonaNome = zoneMap.get(selectedZonaId) || ""
     const value = `ZONA|${selectedZonaId}`
 
     const w = window.open("", "_blank", "width=900,height=700")
@@ -248,30 +302,37 @@ export default function StampaQrZonePage() {
             <select
               value={selectedZonaId}
               onChange={(e) => setSelectedZonaId(e.target.value)}
-              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base outline-none focus:border-amber-500"
+              disabled={zoneLoading || zone.length === 0}
+              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base outline-none focus:border-amber-500 disabled:opacity-60"
             >
-              {zoneEntries.map(([zonaId, zonaNome]) => (
-                <option key={zonaId} value={zonaId}>
-                  {zonaId} - {zonaNome}
-                </option>
-              ))}
+              {zoneLoading ? (
+                <option value="">Caricamento zone...</option>
+              ) : zone.length === 0 ? (
+                <option value="">Nessuna zona disponibile</option>
+              ) : (
+                zone.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.id} - {z.nome}
+                  </option>
+                ))
+              )}
             </select>
 
             <button
               type="button"
               onClick={() => generaQrSingolo(selectedZonaId)}
-              disabled={loadingSingle}
+              disabled={loadingSingle || !selectedZonaId || zoneLoading}
               className="w-full rounded-2xl bg-amber-500 px-5 py-3 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
             >
               {loadingSingle ? "Generazione..." : "Genera QR singolo"}
             </button>
           </div>
 
-          {singleQrUrl && (
+          {singleQrUrl && selectedZonaId && (
             <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-center">
               <div className="text-xl font-bold text-slate-900">{selectedZonaId}</div>
               <div className="mt-1 text-sm text-slate-600">
-                {ZONE_INFO[selectedZonaId]}
+                {zoneMap.get(selectedZonaId) || ""}
               </div>
 
               <img
@@ -317,7 +378,7 @@ export default function StampaQrZonePage() {
             <button
               type="button"
               onClick={generaSetCompleto}
-              disabled={loadingAll}
+              disabled={loadingAll || zoneLoading || zone.length === 0}
               className="rounded-2xl bg-amber-500 px-5 py-3 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
             >
               {loadingAll ? "Generazione set..." : "Genera set completo"}
