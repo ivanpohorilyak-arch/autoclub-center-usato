@@ -34,7 +34,12 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
-      user: data,
+      id: data.id,
+      nome: data.nome,
+      ruolo: data.ruolo,
+      attivo: data.attivo,
+      can_consegna: data.can_consegna,
+      can_modifica_targa: data.can_modifica_targa,
     })
   } catch {
     return NextResponse.json(
