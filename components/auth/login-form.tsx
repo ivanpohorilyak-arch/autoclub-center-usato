@@ -18,6 +18,7 @@ export function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [loadingOperatori, setLoadingOperatori] = useState(true)
   const [errore, setErrore] = useState("")
+  const [showCredit, setShowCredit] = useState(false)
 
   const operatoriFiltrati = useMemo(() => {
     const filtro = filtroOperatore.trim().toLowerCase()
@@ -79,7 +80,7 @@ export function LoginForm() {
       }
     }
 
-    loadOperatori()
+    void loadOperatori()
   }, [])
 
   useEffect(() => {
@@ -87,6 +88,11 @@ export function LoginForm() {
       setOperatore(operatoriFiltrati[0].nome)
     }
   }, [operatoriFiltrati, filtroOperatore])
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowCredit(true), 3000)
+    return () => clearTimeout(t)
+  }, [])
 
   async function handleSubmit(customPin?: string) {
     const finalPin = customPin ?? pin
@@ -282,6 +288,14 @@ export function LoginForm() {
             Accesso in corso...
           </div>
         )}
+
+        <div
+          className={`pt-2 text-center text-[10px] text-slate-300 transition-all duration-700 ${
+            showCredit ? "opacity-70" : "opacity-0"
+          }`}
+        >
+          Autoclub Center 2.1 · by Ivan · supported by ChatGPT &amp; SL
+        </div>
       </div>
     </div>
   )
