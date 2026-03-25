@@ -1,48 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-import { requireServerAuth } from "@/lib/auth-guard"
-
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-}
-
-async function requireAdmin() {
-  const auth = requireServerAuth()
-  if (!auth.ok) {
-    return { ok: false as const, response: auth.response }
-  }
-
-  const supabase = getSupabase()
-
-  const { data: profilo, error } = await supabase
-    .from("profili")
-    .select("ruolo, attivo")
-    .eq("id", auth.user)
-    .maybeSingle()
-
-  if (
-    error ||
-    !profilo ||
-    !profilo.attivo ||
-    String(profilo.ruolo || "").toLowerCase() !== "admin"
-  ) {
-    return {
-      ok: false as const,
-      response: NextResponse.json(
-        { ok: false, error: "Non autorizzato" },
-        { status: 403 }
-      ),
-    }
-  }
-
-  return { ok: true as const, auth, supabase }
-}
+import { getAdminGuard } from "@/lib/is-admin"
 
 export async function GET() {
-  const guard = await requireAdmin()
+  const guard = await getAdminGuard()
   if (!guard.ok) return guard.response
 
   try {
@@ -74,7 +34,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const guard = await requireAdmin()
+  const guard = await getAdminGuard()
   if (!guard.ok) return guard.response
 
   try {
@@ -155,7 +115,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const guard = await requireAdmin()
+  const guard = await getAdminGuard()
   if (!guard.ok) return guard.response
 
   try {
