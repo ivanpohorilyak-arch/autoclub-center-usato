@@ -20,7 +20,7 @@ async function requireAdmin() {
   const { data: profilo, error } = await supabase
     .from("profili")
     .select("ruolo, attivo")
-    .eq("id", auth.userId)
+    .eq("id", auth.user)
     .maybeSingle()
 
   if (
