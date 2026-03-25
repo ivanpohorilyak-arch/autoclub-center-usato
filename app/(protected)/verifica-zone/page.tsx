@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Topbar } from "../../../components/layout/topbar"
 
 type VeicoloZona = {
@@ -14,31 +14,30 @@ type VeicoloZona = {
   note: string | null
 }
 
-const ZONE_INFO: Record<string, string> = {
-  Z01: "Deposito N.9",
-  Z02: "Deposito N.7",
-  Z03: "Deposito N.6 (Lavaggisti)",
-  Z04: "Deposito unificato 1 e 2",
-  Z05: "Showroom",
-  Z06: "Vetture vendute",
-  Z07: "Piazzale Lavaggio",
-  Z08: "Commercianti senza telo",
-  Z09: "Commercianti con telo",
-  Z10: "Lavorazioni esterni",
-  Z11: "Verso altre sedi",
-  Z12: "Deposito N.10",
-  Z13: "Deposito N.8",
-  Z14: "Esterno (Con o Senza telo Motorsclub)",
+type Zona = {
+  id: string
+  nome: string
 }
 
 export default function VerificaZonePage() {
-  const [zonaId, setZonaId] = useState("Z01")
+  const [zone, setZone] = useState<Zona[]>([])
+  const [zoneLoading, setZoneLoading] = useState(true)
+  const [zonaId, setZonaId] = useState("")
   const [records, setRecords] = useState<VeicoloZona[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [showScrollTop, setShowScrollTop] = useState(false)
 
+  const zoneMap = useMemo(() => {
+    return new Map(zone.map((z) => [z.id, z.nome]))
+  }, [zone])
+
   async function loadZona(selectedZonaId: string) {
+    if (!selectedZonaId) {
+      setRecords([])
+      return
+    }
+
     setLoading(true)
     setError("")
 
@@ -66,7 +65,65 @@ export default function VerificaZonePage() {
   }
 
   useEffect(() => {
-    loadZona(zonaId)
+    let active = true
+
+    async function loadZone() {
+      try {
+        setZoneLoading(true)
+        setError("")
+
+        const res = await fetch("/api/zone", {
+          method: "GET",
+          cache: "no-store",
+        })
+
+        const data = await res.json()
+
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || "Errore caricamento zone")
+        }
+
+        const rows: Zona[] = Array.isArray(data.zone) ? data.zone : []
+
+        if (!active) return
+
+        setZone(rows)
+
+        if (rows.length > 0) {
+          setZonaId((prev) => {
+            if (prev && rows.some((z) => z.id === prev)) return prev
+            return rows[0].id
+          })
+        } else {
+          setZonaId("")
+          setRecords([])
+        }
+      } catch (err) {
+        console.error("LOAD ZONE ERROR:", err)
+        if (active) {
+          setZone([])
+          setZonaId("")
+          setRecords([])
+          setError("Errore caricamento zone.")
+        }
+      } finally {
+        if (active) {
+          setZoneLoading(false)
+        }
+      }
+    }
+
+    void loadZone()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (zonaId) {
+      void loadZona(zonaId)
+    }
   }, [zonaId])
 
   useEffect(() => {
@@ -89,6 +146,8 @@ export default function VerificaZonePage() {
     })
   }
 
+  const zonaNome = zonaId ? zoneMap.get(zonaId) || "" : ""
+
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
       <Topbar />
@@ -105,19 +164,26 @@ export default function VerificaZonePage() {
           <select
             value={zonaId}
             onChange={(e) => setZonaId(e.target.value)}
-            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base outline-none focus:border-blue-500"
+            disabled={zoneLoading || zone.length === 0}
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base outline-none focus:border-blue-500 disabled:opacity-60"
           >
-            {Object.entries(ZONE_INFO).map(([id, nome]) => (
-              <option key={id} value={id}>
-                {id} - {nome}
-              </option>
-            ))}
+            {zoneLoading ? (
+              <option value="">Caricamento zone...</option>
+            ) : zone.length === 0 ? (
+              <option value="">Nessuna zona disponibile</option>
+            ) : (
+              zone.map((z) => (
+                <option key={z.id} value={z.id}>
+                  {z.id} - {z.nome}
+                </option>
+              ))
+            )}
           </select>
 
           <button
             type="button"
-            onClick={() => loadZona(zonaId)}
-            disabled={loading}
+            onClick={() => void loadZona(zonaId)}
+            disabled={loading || zoneLoading || !zonaId}
             className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
           >
             {loading ? "Caricamento..." : "Aggiorna"}
@@ -129,7 +195,7 @@ export default function VerificaZonePage() {
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-sm text-slate-500">Zona selezionata</div>
           <div className="mt-1 text-lg font-bold text-slate-900">
-            {zonaId} - {ZONE_INFO[zonaId]}
+            {zonaId ? `${zonaId} - ${zonaNome}` : "-"}
           </div>
         </div>
 
@@ -143,7 +209,7 @@ export default function VerificaZonePage() {
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-sm text-slate-500">Stato vista</div>
           <div className="mt-1 text-base font-semibold text-slate-900">
-            {loading ? "Aggiornamento..." : "Live"}
+            {zoneLoading ? "Caricamento zone..." : loading ? "Aggiornamento..." : "Live"}
           </div>
         </div>
       </div>
