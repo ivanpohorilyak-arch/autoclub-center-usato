@@ -26,8 +26,17 @@ export default function HomePage() {
 
         const data = await res.json()
 
-        if (data?.ok && data?.user) {
-          setUser(data.user)
+        if (data?.ok) {
+          setUser({
+            id: data.id,
+            nome: data.nome,
+            ruolo: data.ruolo,
+            attivo: data.attivo,
+            can_consegna: data.can_consegna,
+            can_modifica_targa: data.can_modifica_targa,
+          })
+        } else {
+          setUser(null)
         }
       } catch {
         setUser(null)
@@ -115,6 +124,15 @@ export default function HomePage() {
             className="rounded-3xl bg-indigo-700 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-indigo-800"
           >
             Gestione Utenti
+          </Link>
+        )}
+
+        {!loadingUser && isAdmin && (
+          <Link
+            href="/zone"
+            className="rounded-3xl bg-fuchsia-700 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-fuchsia-800"
+          >
+            Gestione Zone
           </Link>
         )}
       </div>
