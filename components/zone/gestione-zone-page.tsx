@@ -185,7 +185,7 @@ export function GestioneZonePage() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-slate-900">Gestione zone</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Aggiungi zone, attiva o disattiva, cambia ordine senza toccare GitHub.
+          Aggiungi zone, attiva o disattiva, cambia ordine.
         </p>
       </div>
 
