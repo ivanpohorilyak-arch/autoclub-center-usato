@@ -15,7 +15,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("utenti")
       .select("id, nome, ruolo, attivo, can_consegna, can_modifica_targa")
-      .eq("nome", auth.user)
+      .ilike("nome", `%${auth.user}%`)
       .maybeSingle()
 
     if (error) {
