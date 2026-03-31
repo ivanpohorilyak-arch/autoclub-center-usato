@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"
+
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { requireServerAuth } from "@/lib/auth-guard"
@@ -10,6 +12,48 @@ function getSupabase() {
   )
 }
 
+function jsonNoCache(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  })
+}
+
+function getDbConstraintMessage(
+  error: { code?: string; message?: string; details?: string } | null,
+  targa: string,
+  numeroChiave: number | null
+) {
+  const message = String(error?.message || "").toLowerCase()
+  const details = String(error?.details || "").toLowerCase()
+  const code = String(error?.code || "").toLowerCase()
+
+  const full = `${code} ${message} ${details}`
+
+  if (
+    full.includes("ux_parco_usato_targa_presente") ||
+    full.includes("(targa)")
+  ) {
+    return `La targa ${targa} è già presente in parco.`
+  }
+
+  if (
+    numeroChiave != null &&
+    numeroChiave > 0 &&
+    (full.includes("ux_parco_usato_numero_chiave_presente") ||
+      full.includes("numero_chiave") ||
+      full.includes("(numero_chiave)"))
+  ) {
+    return `La chiave ${numeroChiave} è già occupata da un'altra vettura presente.`
+  }
+
+  return null
+}
+
 export async function GET(req: NextRequest) {
   const auth = requireServerAuth()
   if (!auth.ok) return auth.response
@@ -18,7 +62,7 @@ export async function GET(req: NextRequest) {
     const q = (req.nextUrl.searchParams.get("q") || "").trim()
 
     if (!q) {
-      return NextResponse.json({
+      return jsonNoCache({
         ok: true,
         records: [],
       })
@@ -37,20 +81,20 @@ export async function GET(req: NextRequest) {
       .limit(50)
 
     if (error) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: error.message },
-        { status: 500 }
+        500
       )
     }
 
-    return NextResponse.json({
+    return jsonNoCache({
       ok: true,
       records: data || [],
     })
   } catch {
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Errore interno ricerca ripristino." },
-      { status: 500 }
+      500
     )
   }
 }
@@ -61,12 +105,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const targa = String(body?.targa || "").trim().toUpperCase()
+    const targa = String(body?.targa || "").trim().toUpperCase().replace(/\s+/g, "")
 
     if (!targa) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Targa obbligatoria." },
-        { status: 400 }
+        400
       )
     }
 
@@ -82,9 +126,9 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (veicoloError) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: veicoloError.message },
-        { status: 500 }
+        500
       )
     }
 
@@ -97,9 +141,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Vettura non trovata tra le consegnate." },
-        { status: 404 }
+        404
       )
     }
 
@@ -113,6 +157,12 @@ export async function POST(req: NextRequest) {
       .eq("stato", "CONSEGNATO")
 
     if (updateError) {
+      const friendlyError = getDbConstraintMessage(
+        updateError,
+        targa,
+        veicolo.numero_chiave ?? null
+      )
+
       await writeAuditLog({
         operatore: auth.user,
         azione: "RIPRISTINO_VEICOLO",
@@ -120,13 +170,15 @@ export async function POST(req: NextRequest) {
         numero_chiave: veicolo.numero_chiave ?? 0,
         zona_id: veicolo.zona_id,
         zona_attuale: veicolo.zona_attuale,
-        dettaglio: "Errore durante aggiornamento stato da CONSEGNATO a PRESENTE",
+        dettaglio:
+          friendlyError ||
+          "Errore durante aggiornamento stato da CONSEGNATO a PRESENTE",
         esito: "KO",
       })
 
-      return NextResponse.json(
-        { ok: false, error: updateError.message },
-        { status: 500 }
+      return jsonNoCache(
+        { ok: false, error: friendlyError || updateError.message },
+        friendlyError ? 409 : 500
       )
     }
 
@@ -161,7 +213,7 @@ export async function POST(req: NextRequest) {
       esito: "OK",
     })
 
-    return NextResponse.json({
+    return jsonNoCache({
       ok: true,
       message: "Vettura ripristinata correttamente.",
       veicolo: {
@@ -170,9 +222,9 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch {
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Errore interno ripristino." },
-      { status: 500 }
+      500
     )
   }
 }
