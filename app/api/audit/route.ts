@@ -1,6 +1,19 @@
+export const dynamic = "force-dynamic"
+
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { requireServerAuth } from "@/lib/auth-guard"
+
+function jsonNoCache(body: unknown, init?: { status?: number }) {
+  return NextResponse.json(body, {
+    status: init?.status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  })
+}
 
 export async function GET(req: NextRequest) {
   const auth = requireServerAuth()
@@ -21,8 +34,10 @@ export async function GET(req: NextRequest) {
     const limit = Number(searchParams.get("limit") || "250")
     const offset = Number(searchParams.get("offset") || "0")
 
-    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 250
-    const safeOffset = Number.isFinite(offset) && offset >= 0 ? offset : 0
+    const safeLimit =
+      Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 250
+    const safeOffset =
+      Number.isFinite(offset) && offset >= 0 ? offset : 0
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,13 +94,13 @@ export async function GET(req: NextRequest) {
     const { data, error, count } = await query
 
     if (error) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: error.message },
         { status: 500 }
       )
     }
 
-    return NextResponse.json({
+    return jsonNoCache({
       ok: true,
       records: data || [],
       total: count || 0,
@@ -94,7 +109,7 @@ export async function GET(req: NextRequest) {
       hasMore: safeOffset + (data?.length || 0) < (count || 0),
     })
   } catch {
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Errore interno audit" },
       { status: 500 }
     )
