@@ -21,6 +21,35 @@ function jsonNoCache(body: unknown, status = 200) {
   })
 }
 
+function getDbConstraintMessage(
+  error: { code?: string; message?: string; details?: string } | null,
+  targa: string,
+  numeroChiave: number
+) {
+  const message = String(error?.message || "").toLowerCase()
+  const details = String(error?.details || "").toLowerCase()
+  const code = String(error?.code || "").toLowerCase()
+
+  const full = `${code} ${message} ${details}`
+
+  if (
+    full.includes("ux_parco_usato_targa_presente") ||
+    full.includes("(targa)")
+  ) {
+    return `La targa ${targa} è già presente in parco.`
+  }
+
+  if (
+    full.includes("ux_parco_usato_numero_chiave_presente") ||
+    full.includes("numero_chiave") ||
+    full.includes("(numero_chiave)")
+  ) {
+    return `La chiave ${numeroChiave} è già occupata da un'altra vettura presente.`
+  }
+
+  return null
+}
+
 export async function POST(req: NextRequest) {
   const auth = requireServerAuth()
   if (!auth.ok) return auth.response
@@ -28,17 +57,17 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
 
-    const targa = String(body.targa || "")
+    const targa = String(body?.targa || "")
       .trim()
       .toUpperCase()
       .replace(/\s+/g, "")
-    const marca = String(body.marca || "").trim().toUpperCase()
-    const modello = String(body.modello || "").trim().toUpperCase()
-    const colore = String(body.colore || "").trim()
-    const km = Number(body.km || 0)
-    const numeroChiave = Number(body.numeroChiave || 0)
-    const note = String(body.note || "").trim()
-    const zonaId = String(body.zonaId || "").trim().toUpperCase()
+    const marca = String(body?.marca || "").trim().toUpperCase()
+    const modello = String(body?.modello || "").trim().toUpperCase()
+    const colore = String(body?.colore || "").trim()
+    const km = Number(body?.km || 0)
+    const numeroChiave = Number(body?.numeroChiave || 0)
+    const note = String(body?.note || "").trim()
+    const zonaId = String(body?.zonaId || "").trim().toUpperCase()
     const operatore = auth.user
 
     if (!/^[A-Z]{2}[0-9]{3}[A-Z]{2}$/.test(targa)) {
@@ -61,7 +90,7 @@ export async function POST(req: NextRequest) {
         operatore,
         azione: "INGRESSO_VEICOLO",
         targa,
-        dettaglio: `KM non validi: ${String(body.km ?? "")}`,
+        dettaglio: `KM non validi: ${String(body?.km ?? "")}`,
         esito: "KO",
       })
 
@@ -81,7 +110,7 @@ export async function POST(req: NextRequest) {
         operatore,
         azione: "INGRESSO_VEICOLO",
         targa,
-        dettaglio: `Numero chiave non valido: ${String(body.numeroChiave ?? "")}`,
+        dettaglio: `Numero chiave non valido: ${String(body?.numeroChiave ?? "")}`,
         esito: "KO",
       })
 
@@ -136,8 +165,9 @@ export async function POST(req: NextRequest) {
 
     const { data: targaEsistente, error: errTarga } = await supabase
       .from("parco_usato")
-      .select("targa, stato, zona_attuale, zona_id")
+      .select("targa, zona_attuale, zona_id")
       .eq("targa", targa)
+      .eq("stato", "PRESENTE")
       .limit(1)
 
     if (errTarga) {
@@ -159,17 +189,10 @@ export async function POST(req: NextRequest) {
 
     if (targaEsistente && targaEsistente.length > 0) {
       const record = targaEsistente[0]
-
       const doveSiTrova =
-        record.stato === "PRESENTE"
-          ? `già presente in parco${
-              record.zona_attuale || record.zona_id
-                ? ` in zona ${record.zona_attuale || record.zona_id}`
-                : ""
-            }`
-          : record.stato === "CONSEGNATO"
-            ? "già presente tra le consegnate"
-            : `già presente in archivio con stato ${record.stato || "-"}`
+        record.zona_attuale || record.zona_id
+          ? `già presente in zona ${record.zona_attuale || record.zona_id}`
+          : "già presente in parco"
 
       await writeAuditLog({
         operatore,
@@ -182,10 +205,7 @@ export async function POST(req: NextRequest) {
       })
 
       return jsonNoCache(
-        {
-          ok: false,
-          error: `La targa ${targa} è ${doveSiTrova}.`,
-        },
+        { ok: false, error: `La targa ${targa} è ${doveSiTrova}.` },
         400
       )
     }
@@ -238,24 +258,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const marcaModello = `${marca} ${modello}`.trim()
+    const now = new Date().toISOString()
+
     const payload = {
       targa,
-      marca_modello: `${marca} ${modello}`.trim(),
+      marca_modello: marcaModello,
       colore,
       km,
       numero_chiave: numeroChiave,
       zona_id: zonaId,
       zona_attuale: zonaNome,
-      data_ingresso: new Date().toISOString(),
+      data_ingresso: now,
       note,
       stato: "PRESENTE",
       utente_ultimo_invio: operatore,
     }
 
-    const { error: insertError } = await supabase.from("parco_usato").insert(payload)
+    const { error: insertError } = await supabase
+      .from("parco_usato")
+      .insert(payload)
 
     if (insertError) {
       console.error("Errore insert parco_usato:", insertError)
+
+      const friendlyError = getDbConstraintMessage(
+        insertError,
+        targa,
+        numeroChiave
+      )
 
       await writeAuditLog({
         operatore,
@@ -264,30 +295,34 @@ export async function POST(req: NextRequest) {
         numero_chiave: numeroChiave,
         zona_id: zonaId,
         zona_attuale: zonaNome,
-        dettaglio: "Errore inserimento vettura in parco_usato",
+        dettaglio: friendlyError || "Errore inserimento vettura in parco_usato",
         esito: "KO",
       })
 
       return jsonNoCache(
-        { ok: false, error: insertError.message },
-        500
+        {
+          ok: false,
+          error: friendlyError || insertError.message,
+        },
+        friendlyError ? 400 : 500
       )
     }
 
-    const now = new Date().toISOString()
     const dettaglio =
       `Ingresso in ${zonaNome} | ` +
       `Chiave: ${numeroChiave === 0 ? "0 - Commerciante" : numeroChiave} | ` +
-      `Marca/Modello: ${`${marca} ${modello}`.trim()}`
+      `Marca/Modello: ${marcaModello}`
 
-    const { error: logMovimentiError } = await supabase.from("log_movimenti").insert({
-      targa,
-      azione: "Ingresso",
-      dettaglio,
-      utente: operatore,
-      numero_chiave: numeroChiave,
-      created_at: now,
-    })
+    const { error: logMovimentiError } = await supabase
+      .from("log_movimenti")
+      .insert({
+        targa,
+        azione: "Ingresso",
+        dettaglio,
+        utente: operatore,
+        numero_chiave: numeroChiave,
+        created_at: now,
+      })
 
     if (logMovimentiError) {
       console.error("Errore log_movimenti ingresso:", logMovimentiError)
