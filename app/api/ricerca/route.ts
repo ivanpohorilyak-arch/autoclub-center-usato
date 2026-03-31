@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"
+
 import { requireServerAuth } from "@/lib/auth-guard"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
@@ -7,6 +9,17 @@ function getSupabase() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+}
+
+function jsonNoCache(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  })
 }
 
 export async function GET(req: NextRequest) {
@@ -23,15 +36,17 @@ export async function GET(req: NextRequest) {
     if (recent) {
       const { data, error } = await supabase
         .from("ricerca_log_operatore")
-        .select("id, query, targa, numero_chiave, marca_modello, colore, stato, created_at")
+        .select(
+          "id, query, targa, numero_chiave, marca_modello, colore, stato, created_at"
+        )
         .eq("operatore", auth.user)
         .order("created_at", { ascending: false })
         .limit(30)
 
       if (error) {
-        return NextResponse.json(
+        return jsonNoCache(
           { ok: false, error: error.message },
-          { status: 500 }
+          500
         )
       }
 
@@ -40,7 +55,9 @@ export async function GET(req: NextRequest) {
         .filter((item) => {
           const key =
             item.targa ||
-            (item.numero_chiave != null ? `chiave-${item.numero_chiave}` : item.query)
+            (item.numero_chiave != null
+              ? `chiave-${item.numero_chiave}`
+              : item.query)
 
           if (seen.has(key)) return false
           seen.add(key)
@@ -48,7 +65,7 @@ export async function GET(req: NextRequest) {
         })
         .slice(0, 10)
 
-      return NextResponse.json({
+      return jsonNoCache({
         ok: true,
         recenti,
       })
@@ -56,7 +73,7 @@ export async function GET(req: NextRequest) {
 
     if (suggest) {
       if (!q) {
-        return NextResponse.json({
+        return jsonNoCache({
           ok: true,
           suggerimenti: [],
         })
@@ -65,7 +82,7 @@ export async function GET(req: NextRequest) {
       const isNumeroChiave = /^[0-9]+$/.test(q)
 
       if (!isNumeroChiave && q.length < 2) {
-        return NextResponse.json({
+        return jsonNoCache({
           ok: true,
           suggerimenti: [],
         })
@@ -82,22 +99,22 @@ export async function GET(req: NextRequest) {
         : await suggestQuery.ilike("targa", `%${q}%`)
 
       if (error) {
-        return NextResponse.json(
+        return jsonNoCache(
           { ok: false, error: error.message },
-          { status: 500 }
+          500
         )
       }
 
-      return NextResponse.json({
+      return jsonNoCache({
         ok: true,
         suggerimenti: data || [],
       })
     }
 
     if (!q) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Parametro ricerca mancante" },
-        { status: 400 }
+        400
       )
     }
 
@@ -114,16 +131,16 @@ export async function GET(req: NextRequest) {
       : await query.eq("targa", q)
 
     if (error) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: error.message },
-        { status: 500 }
+        500
       )
     }
 
     if (!veicoli || veicoli.length === 0) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Nessuna vettura trovata" },
-        { status: 404 }
+        404
       )
     }
 
@@ -137,9 +154,9 @@ export async function GET(req: NextRequest) {
       .limit(10)
 
     if (storicoError) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: storicoError.message },
-        { status: 500 }
+        500
       )
     }
 
@@ -150,9 +167,9 @@ export async function GET(req: NextRequest) {
       .maybeSingle()
 
     if (utenteError) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: utenteError.message },
-        { status: 500 }
+        500
       )
     }
 
@@ -166,7 +183,7 @@ export async function GET(req: NextRequest) {
       stato: veicolo.stato ?? null,
     })
 
-    return NextResponse.json({
+    return jsonNoCache({
       ok: true,
       veicolo,
       storico: storico ?? [],
@@ -176,9 +193,9 @@ export async function GET(req: NextRequest) {
       },
     })
   } catch {
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Errore interno ricerca" },
-      { status: 500 }
+      500
     )
   }
 }
