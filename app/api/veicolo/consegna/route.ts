@@ -1,6 +1,7 @@
 import { requireServerAuth } from "@/lib/auth-guard"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { writeAuditLog } from "@/lib/audit-log"
 
 function getSupabase() {
   return createClient(
@@ -9,18 +10,32 @@ function getSupabase() {
   )
 }
 
+function jsonNoCache(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  })
+}
+
 export async function POST(req: NextRequest) {
   const auth = requireServerAuth()
   if (!auth.ok) return auth.response
 
   try {
     const body = await req.json()
-    const targa = String(body?.targa || "").trim().toUpperCase()
+    const targa = String(body?.targa || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "")
 
     if (!targa) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Targa mancante" },
-        { status: 400 }
+        400
       )
     }
 
@@ -33,30 +48,32 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (utenteError) {
-      return NextResponse.json(
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "CONSEGNA_VEICOLO",
+        targa,
+        dettaglio: "Errore lettura permessi utente",
+        esito: "KO",
+      })
+
+      return jsonNoCache(
         { ok: false, error: utenteError.message },
-        { status: 500 }
+        500
       )
     }
 
     if (!utente?.can_consegna) {
-      const now = new Date().toISOString()
-
-      await supabase.from("audit_log_sistema").insert({
+      await writeAuditLog({
         operatore: auth.user,
-        azione: "CONSEGNA NEGATA",
+        azione: "CONSEGNA_VEICOLO",
         targa,
-        numero_chiave: null,
-        zona_id: null,
-        zona_attuale: null,
         dettaglio: "Tentativo consegna senza autorizzazione",
         esito: "KO",
-        created_at: now,
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Non sei autorizzato alla consegna" },
-        { status: 403 }
+        403
       )
     }
 
@@ -68,16 +85,32 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (findError) {
-      return NextResponse.json(
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "CONSEGNA_VEICOLO",
+        targa,
+        dettaglio: "Errore ricerca vettura",
+        esito: "KO",
+      })
+
+      return jsonNoCache(
         { ok: false, error: findError.message },
-        { status: 500 }
+        500
       )
     }
 
     if (!veicolo) {
-      return NextResponse.json(
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "CONSEGNA_VEICOLO",
+        targa,
+        dettaglio: "Vettura non trovata o non presente",
+        esito: "KO",
+      })
+
+      return jsonNoCache(
         { ok: false, error: "Vettura non trovata" },
-        { status: 404 }
+        404
       )
     }
 
@@ -92,44 +125,64 @@ export async function POST(req: NextRequest) {
       .eq("stato", "PRESENTE")
 
     if (updateError) {
-      return NextResponse.json(
+      await writeAuditLog({
+        operatore: auth.user,
+        azione: "CONSEGNA_VEICOLO",
+        targa,
+        numero_chiave: veicolo.numero_chiave ?? 0,
+        zona_id: veicolo.zona_id ?? null,
+        zona_attuale: veicolo.zona_attuale ?? null,
+        dettaglio: "Errore aggiornamento stato consegna",
+        esito: "KO",
+      })
+
+      return jsonNoCache(
         { ok: false, error: updateError.message },
-        { status: 500 }
+        500
       )
     }
 
     const now = new Date().toISOString()
-    const dettaglio = `Uscita da ${veicolo.zona_attuale || "-"}`
+    const dettaglio =
+      `Consegna da ${veicolo.zona_attuale || "-"} | ` +
+      `Chiave liberata: ${veicolo.numero_chiave ?? 0}`
 
-    await supabase.from("log_movimenti").insert({
-      targa,
-      azione: "Consegna",
-      dettaglio,
-      utente: auth.user,
-      numero_chiave: veicolo.numero_chiave ?? 0,
-      created_at: now,
-    })
+    const { error: logError } = await supabase
+      .from("log_movimenti")
+      .insert({
+        targa,
+        azione: "Consegna",
+        dettaglio,
+        utente: auth.user,
+        numero_chiave: veicolo.numero_chiave ?? 0,
+        created_at: now,
+      })
 
-    await supabase.from("audit_log_sistema").insert({
+    if (logError) {
+      console.error("Errore log_movimenti consegna:", logError)
+    }
+
+    await writeAuditLog({
       operatore: auth.user,
-      azione: "CONSEGNA",
+      azione: "CONSEGNA_VEICOLO",
       targa,
       numero_chiave: veicolo.numero_chiave ?? 0,
       zona_id: veicolo.zona_id ?? null,
       zona_attuale: veicolo.zona_attuale ?? null,
       dettaglio,
       esito: "OK",
-      created_at: now,
     })
 
-    return NextResponse.json({
+    return jsonNoCache({
       ok: true,
       message: "Consegna registrata correttamente",
     })
-  } catch {
-    return NextResponse.json(
+  } catch (error) {
+    console.error("Errore interno consegna:", error)
+
+    return jsonNoCache(
       { ok: false, error: "Errore interno consegna" },
-      { status: 500 }
+      500
     )
   }
 }
