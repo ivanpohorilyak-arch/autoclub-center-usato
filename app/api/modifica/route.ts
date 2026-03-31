@@ -10,8 +10,54 @@ function getSupabase() {
   )
 }
 
+function jsonNoCache(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  })
+}
+
 function isValidTarga(value: string) {
   return /^[A-Z]{2}[0-9]{3}[A-Z]{2}$/.test(value)
+}
+
+function getDbConstraintMessage(
+  error: { code?: string; message?: string; details?: string } | null,
+  nuovaTarga: string,
+  numeroChiave: number | null
+) {
+  const message = String(error?.message || "").toLowerCase()
+  const details = String(error?.details || "").toLowerCase()
+  const code = String(error?.code || "").toLowerCase()
+
+  const full = `${code} ${message} ${details}`
+
+  if (
+    full.includes("ux_parco_usato_targa_presente") ||
+    full.includes("(targa)")
+  ) {
+    return `La targa ${nuovaTarga} è già presente in parco.`
+  }
+
+  if (
+    numeroChiave != null &&
+    full.includes("ux_parco_usato_numero_chiave_presente")
+  ) {
+    return `La chiave ${numeroChiave} è già occupata da un'altra vettura presente.`
+  }
+
+  if (
+    numeroChiave != null &&
+    (full.includes("numero_chiave") || full.includes("(numero_chiave)"))
+  ) {
+    return `La chiave ${numeroChiave} è già occupata da un'altra vettura presente.`
+  }
+
+  return null
 }
 
 export async function POST(req: NextRequest) {
@@ -24,19 +70,21 @@ export async function POST(req: NextRequest) {
     const targaOriginale = String(body?.targaOriginale || "")
       .trim()
       .toUpperCase()
+      .replace(/\s+/g, "")
 
     const nuovaTarga = String(body?.targa || "")
       .trim()
       .toUpperCase()
+      .replace(/\s+/g, "")
 
     const marca_modello = String(body?.marca_modello || "")
       .trim()
       .toUpperCase()
 
-    const colore = String(body?.colore || "")
-      .trim()
+    const colore = String(body?.colore || "").trim()
 
-    const km = body?.km === "" || body?.km == null ? null : Number(body.km)
+    const km =
+      body?.km === "" || body?.km == null ? null : Number(body.km)
 
     const numero_chiave =
       body?.numero_chiave === "" || body?.numero_chiave == null
@@ -46,16 +94,16 @@ export async function POST(req: NextRequest) {
     const note = String(body?.note || "").trim()
 
     if (!targaOriginale) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Targa originale mancante" },
-        { status: 400 }
+        400
       )
     }
 
     if (!nuovaTarga) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Targa obbligatoria" },
-        { status: 400 }
+        400
       )
     }
 
@@ -68,9 +116,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Formato targa non valido" },
-        { status: 400 }
+        400
       )
     }
 
@@ -83,9 +131,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Marca / modello obbligatorio" },
-        { status: 400 }
+        400
       )
     }
 
@@ -98,9 +146,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Colore obbligatorio" },
-        { status: 400 }
+        400
       )
     }
 
@@ -116,15 +164,17 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "KM non validi" },
-        { status: 400 }
+        400
       )
     }
 
     if (
       numero_chiave != null &&
-      (!Number.isInteger(numero_chiave) || numero_chiave < 0 || numero_chiave > 9999)
+      (!Number.isInteger(numero_chiave) ||
+        numero_chiave < 0 ||
+        numero_chiave > 9999)
     ) {
       await writeAuditLog({
         operatore: auth.user,
@@ -134,9 +184,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Numero chiave non valido" },
-        { status: 400 }
+        400
       )
     }
 
@@ -157,9 +207,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: utenteError.message },
-        { status: 500 }
+        500
       )
     }
 
@@ -174,9 +224,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Non sei autorizzato a modificare la targa" },
-        { status: 403 }
+        403
       )
     }
 
@@ -196,9 +246,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: findError.message },
-        { status: 500 }
+        500
       )
     }
 
@@ -211,17 +261,18 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Vettura non trovata" },
-        { status: 404 }
+        404
       )
     }
 
     if (nuovaTarga !== targaOriginale) {
       const { data: targaDuplicata, error: targaDupError } = await supabase
         .from("parco_usato")
-        .select("targa, stato, zona_attuale, zona_id")
+        .select("targa, zona_attuale, zona_id")
         .eq("targa", nuovaTarga)
+        .eq("stato", "PRESENTE")
         .limit(1)
 
       if (targaDupError) {
@@ -233,25 +284,18 @@ export async function POST(req: NextRequest) {
           esito: "KO",
         })
 
-        return NextResponse.json(
+        return jsonNoCache(
           { ok: false, error: targaDupError.message },
-          { status: 500 }
+          500
         )
       }
 
       if (targaDuplicata && targaDuplicata.length > 0) {
         const record = targaDuplicata[0]
-
         const doveSiTrova =
-          record.stato === "PRESENTE"
-            ? `già presente in parco${
-                record.zona_attuale || record.zona_id
-                  ? ` in zona ${record.zona_attuale || record.zona_id}`
-                  : ""
-              }`
-            : record.stato === "CONSEGNATO"
-            ? "già presente tra le consegnate"
-            : `già presente in archivio con stato ${record.stato || "-"}`
+          record.zona_attuale || record.zona_id
+            ? `già presente in zona ${record.zona_attuale || record.zona_id}`
+            : "già presente in parco"
 
         await writeAuditLog({
           operatore: auth.user,
@@ -261,12 +305,12 @@ export async function POST(req: NextRequest) {
           esito: "KO",
         })
 
-        return NextResponse.json(
+        return jsonNoCache(
           {
             ok: false,
             error: `La targa ${nuovaTarga} è ${doveSiTrova}.`,
           },
-          { status: 409 }
+          409
         )
       }
     }
@@ -293,9 +337,9 @@ export async function POST(req: NextRequest) {
           esito: "KO",
         })
 
-        return NextResponse.json(
+        return jsonNoCache(
           { ok: false, error: chiaveDupError.message },
-          { status: 500 }
+          500
         )
       }
 
@@ -309,9 +353,12 @@ export async function POST(req: NextRequest) {
           esito: "KO",
         })
 
-        return NextResponse.json(
-          { ok: false, error: "Numero chiave già assegnato a un'altra vettura" },
-          { status: 409 }
+        return jsonNoCache(
+          {
+            ok: false,
+            error: `La chiave ${numero_chiave} è già assegnata alla vettura ${chiaveDuplicata[0].targa}`,
+          },
+          409
         )
       }
     }
@@ -366,6 +413,12 @@ export async function POST(req: NextRequest) {
       .eq("stato", "PRESENTE")
 
     if (updateError) {
+      const friendlyError = getDbConstraintMessage(
+        updateError,
+        nuovaTarga,
+        numero_chiave
+      )
+
       await writeAuditLog({
         operatore: auth.user,
         azione: "MODIFICA_VEICOLO",
@@ -373,13 +426,16 @@ export async function POST(req: NextRequest) {
         numero_chiave: numero_chiave ?? veicoloAttuale.numero_chiave ?? 0,
         zona_id: veicoloAttuale.zona_id ?? null,
         zona_attuale: veicoloAttuale.zona_attuale ?? null,
-        dettaglio: "Errore aggiornamento dati vettura",
+        dettaglio: friendlyError || "Errore aggiornamento dati vettura",
         esito: "KO",
       })
 
-      return NextResponse.json(
-        { ok: false, error: updateError.message },
-        { status: 500 }
+      return jsonNoCache(
+        {
+          ok: false,
+          error: friendlyError || updateError.message,
+        },
+        friendlyError ? 409 : 500
       )
     }
 
@@ -409,7 +465,7 @@ export async function POST(req: NextRequest) {
       esito: "OK",
     })
 
-    return NextResponse.json({
+    return jsonNoCache({
       ok: true,
       message: "Dati aggiornati correttamente",
     })
@@ -423,9 +479,9 @@ export async function POST(req: NextRequest) {
       esito: "KO",
     })
 
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Errore interno modifica" },
-      { status: 500 }
+      500
     )
   }
 }
