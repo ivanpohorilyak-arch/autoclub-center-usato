@@ -1,29 +1,25 @@
+export const dynamic = "force-dynamic"
+
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { requireServerAuth } from "@/lib/auth-guard"
-
-const ZONE_INFO: Record<string, string> = {
-  Z01: "Deposito N.9",
-  Z02: "Deposito N.7",
-  Z03: "Deposito N.6 (Lavaggisti)",
-  Z04: "Deposito unificato 1 e 2",
-  Z05: "Showroom",
-  Z06: "Vetture vendute",
-  Z07: "Piazzale Lavaggio",
-  Z08: "Commercianti senza telo",
-  Z09: "Commercianti con telo",
-  Z10: "Lavorazioni esterni",
-  Z11: "Verso altre sedi",
-  Z12: "Deposito N.10",
-  Z13: "Deposito N.8",
-  Z14: "Esterno (Con o Senza telo Motorsclub)",
-}
 
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+}
+
+function jsonNoCache(body: unknown, init?: { status?: number }) {
+  return NextResponse.json(body, {
+    status: init?.status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  })
 }
 
 function getPeriodRange(periodo: string) {
@@ -74,6 +70,19 @@ export async function GET(req: NextRequest) {
     const { start, end } = getPeriodRange(periodo)
     const supabase = getSupabase()
 
+    const { data: zone, error: zoneError } = await supabase
+      .from("zone")
+      .select("id, nome, attiva, ordine")
+      .eq("attiva", true)
+      .order("ordine", { ascending: true })
+
+    if (zoneError) {
+      return jsonNoCache(
+        { ok: false, error: zoneError.message },
+        { status: 500 }
+      )
+    }
+
     const { data: presenti, error: presentiError } = await supabase
       .from("parco_usato")
       .select(
@@ -82,7 +91,7 @@ export async function GET(req: NextRequest) {
       .eq("stato", "PRESENTE")
 
     if (presentiError) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: presentiError.message },
         { status: 500 }
       )
@@ -105,7 +114,7 @@ export async function GET(req: NextRequest) {
     const { data: logs, error: logError } = await logQuery
 
     if (logError) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: logError.message },
         { status: 500 }
       )
@@ -118,7 +127,7 @@ export async function GET(req: NextRequest) {
       .order("nome", { ascending: true })
 
     if (utentiError) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: utentiError.message },
         { status: 500 }
       )
@@ -132,25 +141,35 @@ export async function GET(req: NextRequest) {
     const consegne = azioni.filter((a) => a === "Consegna").length
     const ripristini = azioni.filter((a) => a === "Ripristino").length
 
-    const kpiZone = Object.entries(ZONE_INFO).map(([id, nome]) => {
+    const kpiZone = (zone || []).map((z) => {
       let inCount = 0
       let spostCount = 0
       let consegCount = 0
 
       for (const r of logs || []) {
+        const azione = String(r.azione || "")
+        const zonaId = String(r.zona_id || "")
+        const zonaAttuale = String(r.zona_attuale || "")
         const dettaglio = String(r.dettaglio || "")
-        if (dettaglio.includes(nome)) {
-          if (r.azione === "Ingresso") inCount++
-          else if (r.azione === "Spostamento") spostCount++
-          else if (r.azione === "Consegna") consegCount++
+
+        const matchZona =
+          zonaId === z.id ||
+          zonaAttuale === z.id ||
+          dettaglio.includes(z.id) ||
+          dettaglio.includes(z.nome)
+
+        if (matchZona) {
+          if (azione === "Ingresso") inCount++
+          else if (azione === "Spostamento") spostCount++
+          else if (azione === "Consegna") consegCount++
         }
       }
 
-      const presentiZona = (presenti || []).filter((v) => v.zona_id === id).length
+      const presentiZona = (presenti || []).filter((v) => v.zona_id === z.id).length
 
       return {
-        zona_id: id,
-        zona_nome: nome,
+        zona_id: z.id,
+        zona_nome: z.nome,
         presenti: presentiZona,
         ingressi: inCount,
         spostamenti: spostCount,
@@ -209,7 +228,7 @@ export async function GET(req: NextRequest) {
     const ferme_14 = vettureFerme.filter((v) => v.giorni_ferma >= 14).length
     const ferme_30 = vettureFerme.filter((v) => v.giorni_ferma >= 30).length
 
-    return NextResponse.json({
+    return jsonNoCache({
       ok: true,
       filtri: {
         periodo,
@@ -240,7 +259,7 @@ export async function GET(req: NextRequest) {
       operatori: (utentiAttivi || []).map((u) => u.nome),
     })
   } catch {
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Errore interno dashboard." },
       { status: 500 }
     )
