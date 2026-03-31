@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"
+
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { requireServerAuth } from "@/lib/auth-guard"
@@ -8,6 +10,17 @@ function getSupabase() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+}
+
+function jsonNoCache(body: unknown, init?: { status?: number }) {
+  return NextResponse.json(body, {
+    status: init?.status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  })
 }
 
 type AdminCheckResult = {
@@ -39,7 +52,7 @@ async function getMeRole(): Promise<AdminCheckResult> {
     return {
       ok: false,
       user: null,
-      response: NextResponse.json(
+      response: jsonNoCache(
         { ok: false, error: "Utente non trovato." },
         { status: 404 }
       ),
@@ -50,7 +63,7 @@ async function getMeRole(): Promise<AdminCheckResult> {
     return {
       ok: false,
       user: null,
-      response: NextResponse.json(
+      response: jsonNoCache(
         { ok: false, error: "Utente non attivo." },
         { status: 403 }
       ),
@@ -63,7 +76,7 @@ async function getMeRole(): Promise<AdminCheckResult> {
     return {
       ok: false,
       user: null,
-      response: NextResponse.json(
+      response: jsonNoCache(
         { ok: false, error: "Accesso riservato ad admin." },
         { status: 403 }
       ),
@@ -90,18 +103,18 @@ export async function GET() {
       .order("nome", { ascending: true })
 
     if (error) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: error.message },
         { status: 500 }
       )
     }
 
-    return NextResponse.json({
+    return jsonNoCache({
       ok: true,
       records: data || [],
     })
   } catch {
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Errore interno utenti." },
       { status: 500 }
     )
@@ -123,21 +136,21 @@ export async function POST(req: NextRequest) {
     const can_modifica_targa = Boolean(body?.can_modifica_targa ?? false)
 
     if (!nome) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Nome obbligatorio." },
         { status: 400 }
       )
     }
 
     if (!/^\d{4}$/.test(pin)) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "PIN obbligatorio di 4 cifre." },
         { status: 400 }
       )
     }
 
     if (!["admin", "operatore"].includes(ruolo)) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Ruolo non valido." },
         { status: 400 }
       )
@@ -152,14 +165,14 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (existingError) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: existingError.message },
         { status: 500 }
       )
     }
 
     if (existing) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Esiste già un utente con questo nome." },
         { status: 409 }
       )
@@ -179,7 +192,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: error.message },
         { status: 500 }
       )
@@ -192,12 +205,12 @@ export async function POST(req: NextRequest) {
       esito: "OK",
     })
 
-    return NextResponse.json({
+    return jsonNoCache({
       ok: true,
       record: data,
     })
   } catch {
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Errore interno creazione utente." },
       { status: 500 }
     )
@@ -219,21 +232,21 @@ export async function PATCH(req: NextRequest) {
     const pinRaw = String(body?.pin || "").trim()
 
     if (!id) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "ID utente mancante." },
         { status: 400 }
       )
     }
 
     if (!["admin", "operatore"].includes(ruolo)) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Ruolo non valido." },
         { status: 400 }
       )
     }
 
     if (pinRaw && !/^\d{4}$/.test(pinRaw)) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Il PIN deve essere di 4 cifre." },
         { status: 400 }
       )
@@ -248,7 +261,7 @@ export async function PATCH(req: NextRequest) {
       .maybeSingle()
 
     if (targetError || !target) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Utente non trovato." },
         { status: 404 }
       )
@@ -263,7 +276,7 @@ export async function PATCH(req: NextRequest) {
       .eq("ruolo", "admin")
 
     if (adminsError) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: adminsError.message },
         { status: 500 }
       )
@@ -276,21 +289,21 @@ export async function PATCH(req: NextRequest) {
       totalActiveAdmins <= 1
 
     if (isSelf && !attivo) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Non puoi disattivare te stesso." },
         { status: 400 }
       )
     }
 
     if (isSelf && ruolo !== "admin") {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Non puoi toglierti il ruolo admin da solo." },
         { status: 400 }
       )
     }
 
     if (targetIsLastActiveAdmin && (!attivo || ruolo !== "admin")) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Deve esistere almeno un admin attivo." },
         { status: 400 }
       )
@@ -315,7 +328,7 @@ export async function PATCH(req: NextRequest) {
       .single()
 
     if (updateError) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: updateError.message },
         { status: 500 }
       )
@@ -328,12 +341,12 @@ export async function PATCH(req: NextRequest) {
       esito: "OK",
     })
 
-    return NextResponse.json({
+    return jsonNoCache({
       ok: true,
       record: updated,
     })
   } catch {
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Errore interno modifica utente." },
       { status: 500 }
     )
@@ -348,7 +361,7 @@ export async function DELETE(req: NextRequest) {
     const id = Number(req.nextUrl.searchParams.get("id") || 0)
 
     if (!id) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "ID utente mancante." },
         { status: 400 }
       )
@@ -363,14 +376,14 @@ export async function DELETE(req: NextRequest) {
       .maybeSingle()
 
     if (targetError || !target) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Utente non trovato." },
         { status: 404 }
       )
     }
 
     if (target.nome === admin.user) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Non puoi eliminare te stesso." },
         { status: 400 }
       )
@@ -383,7 +396,7 @@ export async function DELETE(req: NextRequest) {
       .eq("ruolo", "admin")
 
     if (adminsError) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: adminsError.message },
         { status: 500 }
       )
@@ -396,7 +409,7 @@ export async function DELETE(req: NextRequest) {
       totalActiveAdmins <= 1
 
     if (targetIsLastActiveAdmin) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Impossibile eliminare l'ultimo admin attivo." },
         { status: 400 }
       )
@@ -408,7 +421,7 @@ export async function DELETE(req: NextRequest) {
       .eq("id", id)
 
     if (deleteError) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: deleteError.message },
         { status: 500 }
       )
@@ -421,9 +434,9 @@ export async function DELETE(req: NextRequest) {
       esito: "OK",
     })
 
-    return NextResponse.json({ ok: true })
+    return jsonNoCache({ ok: true })
   } catch {
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Errore interno eliminazione utente." },
       { status: 500 }
     )
