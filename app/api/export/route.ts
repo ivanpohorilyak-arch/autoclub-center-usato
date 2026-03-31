@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"
+
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { requireServerAuth } from "@/lib/auth-guard"
@@ -7,6 +9,30 @@ function getSupabase() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+}
+
+function jsonNoCache(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  })
+}
+
+function csvResponse(csv: string, filename: string) {
+  return new NextResponse(csv, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  })
 }
 
 function csvEscape(value: unknown) {
@@ -52,7 +78,9 @@ export async function GET(req: NextRequest) {
   try {
     const tipo = (req.nextUrl.searchParams.get("tipo") || "").trim()
     const zonaId = (req.nextUrl.searchParams.get("zona_id") || "").trim()
-    const periodo = (req.nextUrl.searchParams.get("periodo") || "ultimi_7_giorni").trim()
+    const periodo = (
+      req.nextUrl.searchParams.get("periodo") || "ultimi_7_giorni"
+    ).trim()
 
     const supabase = getSupabase()
 
@@ -72,9 +100,9 @@ export async function GET(req: NextRequest) {
       const { data, error } = await query
 
       if (error) {
-        return NextResponse.json(
+        return jsonNoCache(
           { ok: false, error: error.message },
-          { status: 500 }
+          500
         )
       }
 
@@ -108,13 +136,7 @@ export async function GET(req: NextRequest) {
 
       const csv = rowsToCsv(headers, rows)
 
-      return new NextResponse(csv, {
-        status: 200,
-        headers: {
-          "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="export_parco_usato.csv"`,
-        },
-      })
+      return csvResponse(csv, "export_parco_usato.csv")
     }
 
     if (tipo === "log_movimenti") {
@@ -127,9 +149,9 @@ export async function GET(req: NextRequest) {
         .order("created_at", { ascending: false })
 
       if (error) {
-        return NextResponse.json(
+        return jsonNoCache(
           { ok: false, error: error.message },
-          { status: 500 }
+          500
         )
       }
 
@@ -153,13 +175,7 @@ export async function GET(req: NextRequest) {
 
       const csv = rowsToCsv(headers, rows)
 
-      return new NextResponse(csv, {
-        status: 200,
-        headers: {
-          "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="export_log_movimenti.csv"`,
-        },
-      })
+      return csvResponse(csv, "export_log_movimenti.csv")
     }
 
     if (tipo === "audit_log") {
@@ -174,9 +190,9 @@ export async function GET(req: NextRequest) {
         .order("created_at", { ascending: false })
 
       if (error) {
-        return NextResponse.json(
+        return jsonNoCache(
           { ok: false, error: error.message },
-          { status: 500 }
+          500
         )
       }
 
@@ -208,23 +224,17 @@ export async function GET(req: NextRequest) {
 
       const csv = rowsToCsv(headers, rows)
 
-      return new NextResponse(csv, {
-        status: 200,
-        headers: {
-          "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="export_audit_log.csv"`,
-        },
-      })
+      return csvResponse(csv, "export_audit_log.csv")
     }
 
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Tipo export non valido." },
-      { status: 400 }
+      400
     )
   } catch {
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Errore interno export." },
-      { status: 500 }
+      500
     )
   }
 }
