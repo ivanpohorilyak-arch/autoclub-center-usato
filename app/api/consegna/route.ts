@@ -10,6 +10,17 @@ function getSupabase() {
   )
 }
 
+function jsonNoCache(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  })
+}
+
 export async function POST(req: NextRequest) {
   const auth = requireServerAuth()
   if (!auth.ok) return auth.response
@@ -19,9 +30,9 @@ export async function POST(req: NextRequest) {
     const targa = String(body?.targa || "").trim().toUpperCase()
 
     if (!targa) {
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Targa mancante" },
-        { status: 400 }
+        400
       )
     }
 
@@ -42,9 +53,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: utenteError.message },
-        { status: 500 }
+        500
       )
     }
 
@@ -57,9 +68,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Non sei autorizzato alla consegna" },
-        { status: 403 }
+        403
       )
     }
 
@@ -79,9 +90,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: findError.message },
-        { status: 500 }
+        500
       )
     }
 
@@ -94,9 +105,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Vettura non trovata" },
-        { status: 404 }
+        404
       )
     }
 
@@ -122,9 +133,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: updateError.message },
-        { status: 500 }
+        500
       )
     }
 
@@ -151,14 +162,14 @@ export async function POST(req: NextRequest) {
       esito: "OK",
     })
 
-    return NextResponse.json({
+    return jsonNoCache({
       ok: true,
       message: "Consegna registrata correttamente",
     })
   } catch {
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Errore interno consegna" },
-      { status: 500 }
+      500
     )
   }
 }
