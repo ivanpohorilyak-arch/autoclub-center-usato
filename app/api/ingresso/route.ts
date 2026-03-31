@@ -10,6 +10,17 @@ function getSupabase() {
   )
 }
 
+function jsonNoCache(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  })
+}
+
 export async function POST(req: NextRequest) {
   const auth = requireServerAuth()
   if (!auth.ok) return auth.response
@@ -17,7 +28,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
 
-    const targa = String(body.targa || "").trim().toUpperCase().replace(/\s+/g, "")
+    const targa = String(body.targa || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "")
     const marca = String(body.marca || "").trim().toUpperCase()
     const modello = String(body.modello || "").trim().toUpperCase()
     const colore = String(body.colore || "").trim()
@@ -36,9 +50,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Formato targa non valido" },
-        { status: 400 }
+        400
       )
     }
 
@@ -51,9 +65,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "KM non validi" },
-        { status: 400 }
+        400
       )
     }
 
@@ -71,9 +85,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Numero chiave non valido" },
-        { status: 400 }
+        400
       )
     }
 
@@ -96,9 +110,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Errore verifica zona: " + zonaError.message },
-        { status: 500 }
+        500
       )
     }
 
@@ -112,9 +126,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: "Zona non valida" },
-        { status: 400 }
+        400
       )
     }
 
@@ -137,9 +151,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: errTarga.message },
-        { status: 500 }
+        500
       )
     }
 
@@ -167,12 +181,12 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         {
           ok: false,
           error: `La targa ${targa} è ${doveSiTrova}.`,
         },
-        { status: 400 }
+        400
       )
     }
 
@@ -196,9 +210,9 @@ export async function POST(req: NextRequest) {
           esito: "KO",
         })
 
-        return NextResponse.json(
+        return jsonNoCache(
           { ok: false, error: errChiave.message },
-          { status: 500 }
+          500
         )
       }
 
@@ -214,12 +228,12 @@ export async function POST(req: NextRequest) {
           esito: "KO",
         })
 
-        return NextResponse.json(
+        return jsonNoCache(
           {
             ok: false,
             error: `La chiave ${numeroChiave} è già occupata dalla vettura ${chiaveEsistente[0].targa}`,
           },
-          { status: 400 }
+          400
         )
       }
     }
@@ -254,9 +268,9 @@ export async function POST(req: NextRequest) {
         esito: "KO",
       })
 
-      return NextResponse.json(
+      return jsonNoCache(
         { ok: false, error: insertError.message },
-        { status: 500 }
+        500
       )
     }
 
@@ -301,16 +315,16 @@ export async function POST(req: NextRequest) {
       esito: "OK",
     })
 
-    return NextResponse.json({
+    return jsonNoCache({
       ok: true,
       message: "Vettura registrata correttamente",
     })
   } catch (error) {
     console.error("Errore interno ingresso veicolo:", error)
 
-    return NextResponse.json(
+    return jsonNoCache(
       { ok: false, error: "Errore interno ingresso" },
-      { status: 500 }
+      500
     )
   }
 }
