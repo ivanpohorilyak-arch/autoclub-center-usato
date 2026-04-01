@@ -2,9 +2,8 @@
 
 import { useMemo, useState } from "react"
 import { QrZoneScanner } from "../scanner/qr-zone-scanner"
-import { ZONE_INFO } from "../../lib/zones"
 
-type ZoneId = keyof typeof ZONE_INFO
+type ZoneId = string
 
 export function IngressoV2() {
   const [zonaId, setZonaId] = useState<ZoneId | "">("")
