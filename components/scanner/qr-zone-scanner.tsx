@@ -9,6 +9,11 @@ type ScanResult = {
   rawValue: string
 }
 
+type ZonaApi = {
+  id: string
+  nome: string
+}
+
 type QrZoneScannerProps = {
   onDetected: (result: ScanResult) => void
   isActive?: boolean
@@ -22,7 +27,7 @@ function extractZonaId(value: string): string | null {
   if (!raw) return null
 
   if (raw.startsWith("ZONA|")) {
-    const zonaId = raw.replace("ZONA|", "").trim()
+    const zonaId = raw.replace("ZONA|", "").trim().toUpperCase()
     return zonaId || null
   }
 
@@ -68,12 +73,16 @@ export function QrZoneScanner({
 
         const json = await res.json()
 
-        if (!res.ok || !json.ok) return null
+        if (!res.ok || !json.ok) {
+          return null
+        }
 
-        const rows = Array.isArray(json.zone) ? json.zone : []
-        const zona = rows.find((z: { id: string; nome: string }) => z.id === zonaId)
+        const rows: ZonaApi[] = Array.isArray(json.zone) ? json.zone : []
+        const zona = rows.find((z) => String(z.id).toUpperCase() === zonaId)
 
-        if (!zona) return null
+        if (!zona) {
+          return null
+        }
 
         return {
           zonaId: zona.id,
