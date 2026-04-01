@@ -54,6 +54,9 @@ export function RicercaVeicolo() {
 
   const zonaQrRef = useRef<Html5Qrcode | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const zoneMapRef = useRef<Map<string, string>>(new Map())
+  const lastScanRef = useRef<{ value: string; at: number } | null>(null)
+  const processingScanRef = useRef(false)
 
   const [q, setQ] = useState("")
   const [loading, setLoading] = useState(false)
@@ -67,6 +70,7 @@ export function RicercaVeicolo() {
   const [scannerZonaMsg, setScannerZonaMsg] = useState(
     "Per confermare lo spostamento è obbligatoria la scansione del QR della zona di destinazione."
   )
+  const [zonesLoaded, setZonesLoaded] = useState(false)
   const [nuovaZonaId, setNuovaZonaId] = useState<ZoneId>("")
   const [nuovaZonaNome, setNuovaZonaNome] = useState("")
 
@@ -95,6 +99,52 @@ export function RicercaVeicolo() {
     }
 
     void loadMe()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadZones() {
+      try {
+        const res = await fetch("/api/zone", {
+          method: "GET",
+          cache: "no-store",
+        })
+
+        const json = await res.json()
+
+        if (!res.ok || !json.ok) {
+          throw new Error(json?.error || "Errore caricamento zone")
+        }
+
+        const rows: ZonaApi[] = Array.isArray(json.zone) ? json.zone : []
+        const map = new Map<string, string>()
+
+        for (const row of rows) {
+          const id = String(row.id || "").trim().toUpperCase()
+          const nome = String(row.nome || "").trim()
+          if (id) {
+            map.set(id, nome)
+          }
+        }
+
+        if (!cancelled) {
+          zoneMapRef.current = map
+          setZonesLoaded(true)
+        }
+      } catch {
+        if (!cancelled) {
+          zoneMapRef.current = new Map()
+          setZonesLoaded(false)
+        }
+      }
+    }
+
+    void loadZones()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   async function cercaVeicolo(search?: string) {
@@ -155,32 +205,19 @@ export function RicercaVeicolo() {
       //
     } finally {
       zonaQrRef.current = null
-    }
-  }
-
-  async function caricaZonaDaApi(code: string): Promise<ZonaApi | null> {
-    try {
-      const res = await fetch("/api/zone", {
-        method: "GET",
-        cache: "no-store",
-      })
-
-      const json = await res.json()
-
-      if (!res.ok || !json.ok) {
-        return null
-      }
-
-      const rows: ZonaApi[] = Array.isArray(json.zone) ? json.zone : []
-      return rows.find((z) => String(z.id).toUpperCase() === code) || null
-    } catch {
-      return null
+      processingScanRef.current = false
     }
   }
 
   async function startZonaScanner() {
     try {
       await stopZonaScanner()
+
+      if (!zonesLoaded) {
+        setScannerZonaMsg("Zone attive non ancora caricate.")
+        setScannerZonaAttivo(false)
+        return
+      }
 
       const qr = new Html5Qrcode(scannerZonaId)
       zonaQrRef.current = qr
@@ -197,30 +234,43 @@ export function RicercaVeicolo() {
           aspectRatio: 1,
         },
         async (decodedText) => {
-          const value = decodedText.trim().toUpperCase()
+          const raw = decodedText.trim().toUpperCase()
+          const now = Date.now()
 
-          if (!value.startsWith("ZONA|")) {
+          const last = lastScanRef.current
+          if (last && last.value === raw && now - last.at < 1500) {
+            return
+          }
+          lastScanRef.current = { value: raw, at: now }
+
+          if (processingScanRef.current) return
+          processingScanRef.current = true
+
+          if (!raw.startsWith("ZONA|")) {
             setScannerZonaMsg("QR non valido. Serve un QR tipo ZONA|Z01.")
+            processingScanRef.current = false
             return
           }
 
-          const code = value.replace("ZONA|", "").trim().toUpperCase()
+          const code = raw.replace("ZONA|", "").trim().toUpperCase()
 
           if (!/^Z\d{2}$/.test(code)) {
             setScannerZonaMsg("Zona non riconosciuta.")
+            processingScanRef.current = false
             return
           }
 
-          const zona = await caricaZonaDaApi(code)
+          const zonaNome = zoneMapRef.current.get(code)
 
-          if (!zona) {
+          if (!zonaNome) {
             setScannerZonaMsg("Zona non riconosciuta o non attiva.")
+            processingScanRef.current = false
             return
           }
 
-          setNuovaZonaId(zona.id)
-          setNuovaZonaNome(zona.nome)
-          setScannerZonaMsg(`Zona di destinazione letta: ${zona.id} - ${zona.nome}`)
+          setNuovaZonaId(code)
+          setNuovaZonaNome(zonaNome)
+          setScannerZonaMsg(`Zona di destinazione letta: ${code} - ${zonaNome}`)
 
           if (navigator.vibrate) {
             navigator.vibrate(100)
@@ -247,7 +297,7 @@ export function RicercaVeicolo() {
     return () => {
       void stopZonaScanner()
     }
-  }, [scannerZonaAttivo, scannerZonaId])
+  }, [scannerZonaAttivo, scannerZonaId, zonesLoaded])
 
   async function confermaSpostamento() {
     if (!veicolo) return
