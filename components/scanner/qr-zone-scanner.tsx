@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Html5Qrcode } from "html5-qrcode"
-import { ZONE_INFO, type ZoneId } from "@/lib/zones"
 
 type ScanResult = {
-  zonaId: ZoneId
+  zonaId: string
   zonaNome: string
   rawValue: string
 }
@@ -17,26 +16,17 @@ type QrZoneScannerProps = {
   className?: string
 }
 
-function parseZonaQr(value: string): ScanResult | null {
-  const raw = String(value || "").trim()
+function extractZonaId(value: string): string | null {
+  const raw = String(value || "").trim().toUpperCase()
 
   if (!raw) return null
 
-  let zonaId = raw as ZoneId
-
   if (raw.startsWith("ZONA|")) {
-    zonaId = raw.replace("ZONA|", "").trim() as ZoneId
+    const zonaId = raw.replace("ZONA|", "").trim()
+    return zonaId || null
   }
 
-  if (!Object.prototype.hasOwnProperty.call(ZONE_INFO, zonaId)) {
-    return null
-  }
-
-  return {
-    zonaId,
-    zonaNome: ZONE_INFO[zonaId].nome,
-    rawValue: raw,
-  }
+  return raw || null
 }
 
 export function QrZoneScanner({
@@ -47,6 +37,8 @@ export function QrZoneScanner({
 }: QrZoneScannerProps) {
   const qrRef = useRef<Html5Qrcode | null>(null)
   const startedRef = useRef(false)
+  const processingRef = useRef(false)
+
   const [error, setError] = useState("")
   const [isStarting, setIsStarting] = useState(false)
 
@@ -63,6 +55,33 @@ export function QrZoneScanner({
       } finally {
         startedRef.current = false
         qrRef.current = null
+        processingRef.current = false
+      }
+    }
+
+    async function resolveZona(zonaId: string): Promise<ScanResult | null> {
+      try {
+        const res = await fetch("/api/zone", {
+          method: "GET",
+          cache: "no-store",
+        })
+
+        const json = await res.json()
+
+        if (!res.ok || !json.ok) return null
+
+        const rows = Array.isArray(json.zone) ? json.zone : []
+        const zona = rows.find((z: { id: string; nome: string }) => z.id === zonaId)
+
+        if (!zona) return null
+
+        return {
+          zonaId: zona.id,
+          zonaNome: zona.nome,
+          rawValue: `ZONA|${zona.id}`,
+        }
+      } catch {
+        return null
       }
     }
 
@@ -85,9 +104,23 @@ export function QrZoneScanner({
             aspectRatio: 1,
           },
           async (decodedText) => {
-            const parsed = parseZonaQr(decodedText)
+            if (processingRef.current) return
+            processingRef.current = true
 
-            if (!parsed) return
+            const zonaId = extractZonaId(decodedText)
+
+            if (!zonaId) {
+              processingRef.current = false
+              return
+            }
+
+            const parsed = await resolveZona(zonaId)
+
+            if (!parsed) {
+              setError(`Zona ${zonaId} non valida o non attiva.`)
+              processingRef.current = false
+              return
+            }
 
             onDetected(parsed)
 
@@ -100,10 +133,10 @@ export function QrZoneScanner({
             } finally {
               startedRef.current = false
               qrRef.current = null
+              processingRef.current = false
             }
           },
-          () => {
-          }
+          () => {}
         )
 
         if (!cancelled) {
@@ -121,14 +154,14 @@ export function QrZoneScanner({
     }
 
     if (isActive) {
-      startScanner()
+      void startScanner()
     } else {
-      stopScanner()
+      void stopScanner()
     }
 
     return () => {
       cancelled = true
-      stopScanner()
+      void stopScanner()
     }
   }, [isActive, onDetected, scannerId])
 
