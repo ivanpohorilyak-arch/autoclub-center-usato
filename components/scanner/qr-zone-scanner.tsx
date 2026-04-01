@@ -43,9 +43,62 @@ export function QrZoneScanner({
   const qrRef = useRef<Html5Qrcode | null>(null)
   const startedRef = useRef(false)
   const processingRef = useRef(false)
+  const lastScanRef = useRef<{ value: string; at: number } | null>(null)
+  const zoneMapRef = useRef<Map<string, string>>(new Map())
 
   const [error, setError] = useState("")
   const [isStarting, setIsStarting] = useState(false)
+  const [zonesLoaded, setZonesLoaded] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadZones() {
+      try {
+        setError("")
+        setZonesLoaded(false)
+
+        const res = await fetch("/api/zone", {
+          method: "GET",
+          cache: "no-store",
+        })
+
+        const json = await res.json()
+
+        if (!res.ok || !json.ok) {
+          throw new Error(json?.error || "Errore caricamento zone")
+        }
+
+        const rows: ZonaApi[] = Array.isArray(json.zone) ? json.zone : []
+        const map = new Map<string, string>()
+
+        for (const row of rows) {
+          const id = String(row.id || "").trim().toUpperCase()
+          const nome = String(row.nome || "").trim()
+          if (id) {
+            map.set(id, nome)
+          }
+        }
+
+        if (!cancelled) {
+          zoneMapRef.current = map
+          setZonesLoaded(true)
+        }
+      } catch {
+        if (!cancelled) {
+          zoneMapRef.current = new Map()
+          setError("Impossibile caricare le zone attive.")
+          setZonesLoaded(false)
+        }
+      }
+    }
+
+    void loadZones()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -64,38 +117,9 @@ export function QrZoneScanner({
       }
     }
 
-    async function resolveZona(zonaId: string): Promise<ScanResult | null> {
-      try {
-        const res = await fetch("/api/zone", {
-          method: "GET",
-          cache: "no-store",
-        })
-
-        const json = await res.json()
-
-        if (!res.ok || !json.ok) {
-          return null
-        }
-
-        const rows: ZonaApi[] = Array.isArray(json.zone) ? json.zone : []
-        const zona = rows.find((z) => String(z.id).toUpperCase() === zonaId)
-
-        if (!zona) {
-          return null
-        }
-
-        return {
-          zonaId: zona.id,
-          zonaNome: zona.nome,
-          rawValue: `ZONA|${zona.id}`,
-        }
-      } catch {
-        return null
-      }
-    }
-
     async function startScanner() {
       if (!isActive) return
+      if (!zonesLoaded) return
       if (startedRef.current) return
 
       try {
@@ -113,25 +137,50 @@ export function QrZoneScanner({
             aspectRatio: 1,
           },
           async (decodedText) => {
+            const now = Date.now()
+            const raw = String(decodedText || "").trim()
+
+            if (!raw) return
+
+            const last = lastScanRef.current
+            if (last && last.value === raw && now - last.at < 1500) {
+              return
+            }
+            lastScanRef.current = { value: raw, at: now }
+
             if (processingRef.current) return
             processingRef.current = true
 
-            const zonaId = extractZonaId(decodedText)
+            const zonaId = extractZonaId(raw)
 
             if (!zonaId) {
               processingRef.current = false
               return
             }
 
-            const parsed = await resolveZona(zonaId)
+            if (!/^Z\d{2}$/.test(zonaId)) {
+              setError("QR zona non valido.")
+              processingRef.current = false
+              return
+            }
 
-            if (!parsed) {
+            const zonaNome = zoneMapRef.current.get(zonaId)
+
+            if (!zonaNome) {
               setError(`Zona ${zonaId} non valida o non attiva.`)
               processingRef.current = false
               return
             }
 
-            onDetected(parsed)
+            onDetected({
+              zonaId,
+              zonaNome,
+              rawValue: raw,
+            })
+
+            if (navigator.vibrate) {
+              navigator.vibrate(100)
+            }
 
             try {
               if (qrRef.current && startedRef.current) {
@@ -162,7 +211,7 @@ export function QrZoneScanner({
       }
     }
 
-    if (isActive) {
+    if (isActive && zonesLoaded) {
       void startScanner()
     } else {
       void stopScanner()
@@ -172,7 +221,7 @@ export function QrZoneScanner({
       cancelled = true
       void stopScanner()
     }
-  }, [isActive, onDetected, scannerId])
+  }, [isActive, zonesLoaded, onDetected, scannerId])
 
   return (
     <div className={className}>
@@ -180,6 +229,12 @@ export function QrZoneScanner({
         id={scannerId}
         className="overflow-hidden rounded-3xl border border-slate-200 bg-black"
       />
+
+      {!zonesLoaded && !error && (
+        <div className="mt-3 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-600">
+          Caricamento zone attive...
+        </div>
+      )}
 
       {isStarting && (
         <div className="mt-3 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-600">
