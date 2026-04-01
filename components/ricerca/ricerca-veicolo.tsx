@@ -3,24 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Html5Qrcode } from "html5-qrcode"
 
-const ZONE_INFO = {
-  Z01: "Deposito N.9",
-  Z02: "Deposito N.7",
-  Z03: "Deposito N.6 (Lavaggisti)",
-  Z04: "Deposito unificato 1 e 2",
-  Z05: "Showroom",
-  Z06: "Vetture vendute",
-  Z07: "Piazzale Lavaggio",
-  Z08: "Commercianti senza telo",
-  Z09: "Commercianti con telo",
-  Z10: "Lavorazioni esterni",
-  Z11: "Verso altre sedi",
-  Z12: "Deposito N.10",
-  Z13: "Deposito N.8",
-  Z14: "Esterno (Con o Senza telo Motorsclub)",
-} as const
+type ZoneId = string
 
-type ZoneId = keyof typeof ZONE_INFO
+type ZonaApi = {
+  id: string
+  nome: string
+}
 
 type UserInfo = {
   nome: string
@@ -79,7 +67,8 @@ export function RicercaVeicolo() {
   const [scannerZonaMsg, setScannerZonaMsg] = useState(
     "Per confermare lo spostamento è obbligatoria la scansione del QR della zona di destinazione."
   )
-  const [nuovaZonaId, setNuovaZonaId] = useState<ZoneId | "">("")
+  const [nuovaZonaId, setNuovaZonaId] = useState<ZoneId>("")
+  const [nuovaZonaNome, setNuovaZonaNome] = useState("")
 
   const [showModifica, setShowModifica] = useState(false)
   const [editTarga, setEditTarga] = useState("")
@@ -95,7 +84,7 @@ export function RicercaVeicolo() {
   useEffect(() => {
     async function loadMe() {
       try {
-        const res = await fetch("/api/me")
+        const res = await fetch("/api/me", { cache: "no-store" })
         const data = await res.json()
         if (res.ok && data.ok) {
           setUser(data.user)
@@ -105,7 +94,7 @@ export function RicercaVeicolo() {
       }
     }
 
-    loadMe()
+    void loadMe()
   }, [])
 
   async function cercaVeicolo(search?: string) {
@@ -125,7 +114,9 @@ export function RicercaVeicolo() {
       setShowModifica(false)
       setShowConsegna(false)
 
-      const res = await fetch(`/api/ricerca?q=${encodeURIComponent(query)}`)
+      const res = await fetch(`/api/ricerca?q=${encodeURIComponent(query)}`, {
+        cache: "no-store",
+      })
       const data = await res.json()
 
       if (!res.ok || !data.ok) {
@@ -167,6 +158,26 @@ export function RicercaVeicolo() {
     }
   }
 
+  async function caricaZonaDaApi(code: string): Promise<ZonaApi | null> {
+    try {
+      const res = await fetch("/api/zone", {
+        method: "GET",
+        cache: "no-store",
+      })
+
+      const json = await res.json()
+
+      if (!res.ok || !json.ok) {
+        return null
+      }
+
+      const rows: ZonaApi[] = Array.isArray(json.zone) ? json.zone : []
+      return rows.find((z) => String(z.id).toUpperCase() === code) || null
+    } catch {
+      return null
+    }
+  }
+
   async function startZonaScanner() {
     try {
       await stopZonaScanner()
@@ -193,15 +204,23 @@ export function RicercaVeicolo() {
             return
           }
 
-          const code = value.replace("ZONA|", "").trim() as ZoneId
+          const code = value.replace("ZONA|", "").trim().toUpperCase()
 
-          if (!ZONE_INFO[code]) {
+          if (!/^Z\d{2}$/.test(code)) {
             setScannerZonaMsg("Zona non riconosciuta.")
             return
           }
 
-          setNuovaZonaId(code)
-          setScannerZonaMsg(`Zona di destinazione letta: ${code} - ${ZONE_INFO[code]}`)
+          const zona = await caricaZonaDaApi(code)
+
+          if (!zona) {
+            setScannerZonaMsg("Zona non riconosciuta o non attiva.")
+            return
+          }
+
+          setNuovaZonaId(zona.id)
+          setNuovaZonaNome(zona.nome)
+          setScannerZonaMsg(`Zona di destinazione letta: ${zona.id} - ${zona.nome}`)
 
           if (navigator.vibrate) {
             navigator.vibrate(100)
@@ -228,7 +247,7 @@ export function RicercaVeicolo() {
     return () => {
       void stopZonaScanner()
     }
-  }, [scannerZonaAttivo])
+  }, [scannerZonaAttivo, scannerZonaId])
 
   async function confermaSpostamento() {
     if (!veicolo) return
@@ -260,6 +279,7 @@ export function RicercaVeicolo() {
       setFeedback("Spostamento registrato correttamente.")
       setShowSposta(false)
       setNuovaZonaId("")
+      setNuovaZonaNome("")
       await cercaVeicolo(veicolo.targa)
     } catch {
       setFeedback("Errore di connessione durante lo spostamento.")
@@ -437,6 +457,7 @@ export function RicercaVeicolo() {
                   setShowModifica(false)
                   setShowConsegna(false)
                   setNuovaZonaId("")
+                  setNuovaZonaNome("")
                   setScannerZonaMsg(
                     "Per confermare lo spostamento è obbligatoria la scansione del QR della zona di destinazione."
                   )
@@ -521,7 +542,7 @@ export function RicercaVeicolo() {
                   <div className="text-sm font-semibold text-emerald-700">
                     Nuova zona: {nuovaZonaId}
                   </div>
-                  <div className="text-sm text-emerald-800">{ZONE_INFO[nuovaZonaId]}</div>
+                  <div className="text-sm text-emerald-800">{nuovaZonaNome}</div>
                 </div>
               )}
 
@@ -531,7 +552,7 @@ export function RicercaVeicolo() {
                   <div className="mt-2 text-sm text-slate-800">
                     <strong>{veicolo.targa}</strong> verrà spostata da{" "}
                     <strong>{veicolo.zona_attuale}</strong> a{" "}
-                    <strong>{ZONE_INFO[nuovaZonaId]}</strong>.
+                    <strong>{nuovaZonaNome}</strong>.
                   </div>
 
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row">
@@ -547,6 +568,7 @@ export function RicercaVeicolo() {
                       type="button"
                       onClick={() => {
                         setNuovaZonaId("")
+                        setNuovaZonaNome("")
                         setShowSposta(false)
                       }}
                       className="rounded-2xl bg-slate-200 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-300"
