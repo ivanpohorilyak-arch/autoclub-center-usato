@@ -23,8 +23,19 @@ export function requireServerAuth() {
     return {
       ok: false as const,
       response: Response.json(
-        { ok: false, error: "Non autorizzato." },
-        { status: 401 }
+        {
+          ok: false,
+          error: "Sessione scaduta. Effettua di nuovo il login.",
+          code: "SESSION_EXPIRED",
+        },
+        {
+          status: 401,
+          headers: {
+            "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+        }
       ),
     }
   }
