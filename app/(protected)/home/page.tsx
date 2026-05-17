@@ -14,9 +14,9 @@ type MeUser = {
 }
 
 // Stile uniforme per tutte le tile della home.
-// Sfondo antracite (slate-600), accento ambra all'hover (palette B).
+// Sfondo grigio medio (slate-400), accento ambra all'hover (palette B).
 const tileClass =
-  "rounded-3xl bg-slate-600 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-slate-700 hover:ring-2 hover:ring-amber-500"
+  "rounded-3xl bg-slate-400 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-slate-500 hover:ring-2 hover:ring-amber-500"
 
 export default function HomePage() {
   const [user, setUser] = useState<MeUser | null>(null)

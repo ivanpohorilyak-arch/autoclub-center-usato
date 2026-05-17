@@ -41,7 +41,7 @@ export function Topbar() {
             {!isHome ? (
               <Link
                 href="/home"
-                className="rounded-2xl bg-blue-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-700"
+                className="rounded-2xl bg-slate-400 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-slate-500"
               >
                 Home
               </Link>
