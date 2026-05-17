@@ -1,6 +1,6 @@
 {
   "name": "Autoclub Center Usato",
-  "short_name": "Autoclub",
+  "short_name": "Autoclub Usato",
   "description": "Gestionale parco usato Autoclub — ingresso veicoli, ricerca, gestione zone.",
   "start_url": "/home",
   "scope": "/",
