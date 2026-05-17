@@ -33,7 +33,7 @@ export function Topbar() {
             <button
               type="button"
               onClick={() => router.back()}
-              className="rounded-2xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+              className="rounded-2xl bg-slate-400 px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-500"
             >
               Indietro
             </button>
@@ -41,7 +41,7 @@ export function Topbar() {
             {!isHome ? (
               <Link
                 href="/home"
-                className="rounded-2xl bg-blue-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-700"
+                className="rounded-2xl bg-slate-400 px-4 py-2.5 text-center text-sm font-semibold text-slate-900 hover:bg-slate-500"
               >
                 Home
               </Link>
@@ -54,7 +54,7 @@ export function Topbar() {
             <button
               type="button"
               onClick={handleLogout}
-              className="rounded-2xl bg-red-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-600"
+              className="rounded-2xl bg-red-500 px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-red-600"
             >
               Logout
             </button>

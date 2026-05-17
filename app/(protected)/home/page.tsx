@@ -13,6 +13,11 @@ type MeUser = {
   can_modifica_targa: boolean
 }
 
+// Stile uniforme per tutte le tile della home.
+// Sfondo grigio medio (slate-400), accento ambra all'hover (palette B).
+const tileClass =
+  "rounded-3xl bg-slate-400 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-slate-500 hover:ring-2 hover:ring-amber-500"
+
 export default function HomePage() {
   const [user, setUser] = useState<MeUser | null>(null)
   const [loadingUser, setLoadingUser] = useState(true)
@@ -57,81 +62,51 @@ export default function HomePage() {
       <div className="mb-6">
         <h2 className="text-3xl font-bold text-slate-900">Home</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Seleziona un’operazione del gestionale.
+          Seleziona un&rsquo;operazione del gestionale.
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <Link
-          href="/ingresso"
-          className="rounded-3xl bg-blue-600 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-blue-700"
-        >
+        <Link href="/ingresso" className={tileClass}>
           Ingresso Veicolo
         </Link>
 
-        <Link
-          href="/ricerca"
-          className="rounded-3xl bg-green-600 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-green-700"
-        >
+        <Link href="/ricerca" className={tileClass}>
           Ricerca Veicolo
         </Link>
 
-        <Link
-          href="/dashboard"
-          className="rounded-3xl bg-violet-600 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-violet-700"
-        >
+        <Link href="/dashboard" className={tileClass}>
           Dashboard
         </Link>
 
-        <Link
-          href="/verifica-zone"
-          className="rounded-3xl bg-indigo-500 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-indigo-600"
-        >
+        <Link href="/verifica-zone" className={tileClass}>
           Verifica Zone
         </Link>
 
-        <Link
-          href="/audit"
-          className="rounded-3xl bg-slate-800 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-slate-900"
-        >
+        <Link href="/audit" className={tileClass}>
           Audit Log Sistema
         </Link>
 
-        <Link
-          href="/export"
-          className="rounded-3xl bg-cyan-600 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-cyan-700"
-        >
+        <Link href="/export" className={tileClass}>
           Export
         </Link>
 
-        <Link
-          href="/stampa-qr-zone"
-          className="rounded-3xl bg-amber-500 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-amber-600"
-        >
+        <Link href="/stampa-qr-zone" className={tileClass}>
           Stampa QR Zone
         </Link>
 
-        <Link
-          href="/ripristina"
-          className="rounded-3xl bg-rose-500 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-rose-600"
-        >
+        <Link href="/ripristina" className={tileClass}>
           Ripristina
         </Link>
 
         {!loadingUser && isAdmin && (
-          <Link
-            href="/gestione-utenti"
-            className="rounded-3xl bg-indigo-700 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-indigo-800"
-          >
+          <Link href="/gestione-utenti" className={tileClass}>
             Gestione Utenti
           </Link>
         )}
 
         {!loadingUser && isAdmin && (
-          <Link
-            href="/zone"
-            className="rounded-3xl bg-fuchsia-700 px-6 py-10 text-center text-2xl font-bold text-white shadow-sm transition hover:scale-[1.01] hover:bg-fuchsia-800"
-          >
+          <Link href="/zone" className={tileClass}>
             Gestione Zone
           </Link>
         )}
